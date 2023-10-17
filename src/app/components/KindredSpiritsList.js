@@ -1,5 +1,6 @@
 import { useEffect, useState, useContext, useRef } from "react";
-import { Alchemy, Network } from "alchemy-sdk";
+import { Network } from "alchemy-sdk";
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import NftModal from "./NftModal";
 import { useEnsName } from "wagmi";
 import { ethers } from "ethers";
@@ -12,11 +13,7 @@ import { KindredButtonContext } from './context/KindredButtonContext';
 
 const provider = ethers.getDefaultProvider();
 
-const config = {
-  apiKey: process.env.ALCHEMY_API_KEY,
-  network: Network.ETH_MAINNET,
-};
-const alchemy = new Alchemy(config);
+const alchemy = new AlchemyMultichainClient();
 
 Modal.setAppElement('#root'); 
 
@@ -146,13 +143,13 @@ useEffect(() => {
       // Local variable for total wallets
       let totalWalletsLocal = 0;
   
-      for (const nftAddress of nftAddressesArray) {
+      for (const { address: nftAddress, network: nftNetwork } of nftAddressesArray) {
         let owners = [];
-        let response = await alchemy.nft.getOwnersForContract(nftAddress);
+        let response = await alchemy.forNetwork(nftNetwork).nft.getOwnersForContract(nftAddress);
         owners = owners.concat(response.owners);
     
         while (response.pageKey) {
-            response = await alchemy.nft.getOwnersForContract(nftAddress, { pageKey: response.pageKey });
+            response = await alchemy.forNetwork(nftNetwork).nft.getOwnersForContract(nftAddress, { pageKey: response.pageKey });
             if (owners.length > 150000) {
                 break;  // break out of the loop entirely
             }
@@ -234,8 +231,10 @@ useEffect(() => {
       setTotalOwnedNFTs(selectedNFTsContext.length.toLocaleString());
       setTotalNfts(selectedNFTsContext);    
       // Extract the contract addresses from the ownedNfts array
-      nftAddressesArray = selectedNFTsContext.map((nft) => nft.contract.address);
-    
+      nftAddressesArray = selectedNFTsContext.map((nft) => ({
+        address: nft.contract.address,
+        network: nft.network
+      }));     
       if(nftAddressesArray.length) {
         await getOwnersForContracts(nftAddressesArray, addressOrEns);
       } else {

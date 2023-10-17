@@ -1,10 +1,11 @@
 import { useState, useEffect, useContext, useRef,useLayoutEffect } from 'react';
-import { Alchemy, Network } from 'alchemy-sdk';
+import { Network } from 'alchemy-sdk';
 import NftDescription from './NftDescription';
 import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 import Modal from 'react-modal';
 
@@ -39,42 +40,43 @@ export default function NftTableList() {
     setShowKindredSpirits,
   } = useContext(KindredButtonContext);
   
-  const config = {
-    apiKey: process.env.ALCHEMY_API_KEY,
-    network: Network.ETH_MAINNET,
-  };
-  const alchemy = new Alchemy(config);
+  const alchemy = new AlchemyMultichainClient();
 
   const fetchNfts = async (addressToFetch, key) => {
     setIsLoadingModal(true);
     let ownedNfts = [];
     let seenAddresses = new Set(); // Track seen contract addresses
     let uniqueNfts = [];           // Store NFTs with unique contract addresses
-    let currentPageKey = key;
-    while (true) {
-        try {
-            const fetchedNfts = await alchemy.nft.getNftsForOwner(
-                addressToFetch,
-                { pageKey: currentPageKey }
-            );
-            ownedNfts = [...ownedNfts, ...fetchedNfts.ownedNfts];
-            
-            // Filter out NFTs with duplicated contract addresses
-            for (let nft of fetchedNfts.ownedNfts) {
-                const address = nft.contract['address'];
-                if (!seenAddresses.has(address)) {
-                    seenAddresses.add(address);
-                    uniqueNfts.push(nft);
-                }
-            }
-            
-            if (!fetchedNfts.pageKey) {
-                break;
-            }
-            currentPageKey = fetchedNfts.pageKey;
-        } catch (err) {
-            console.error("Error while fetching NFTs:", err);
-        }
+    const networks = alchemy.getAllNetworks();
+    const pageKeys = {};
+    for (let network of networks) {
+      const alchemyNetwork = alchemy.forNetwork(network);
+      while (true) {
+          try {
+              const fetchedNfts = await alchemyNetwork.nft.getNftsForOwner(
+                  addressToFetch,
+                  { pageKey: pageKeys[network] });
+              ownedNfts = [...ownedNfts, ...fetchedNfts.ownedNfts];
+              
+              // Filter out NFTs with duplicated contract addresses
+              for (let nft of fetchedNfts.ownedNfts) {
+                  const address = nft.contract['address'];
+                  if (!seenAddresses.has(address)) {
+                      seenAddresses.add(address);
+                      nft.networkName = alchemy.getNetworkName(network);
+                      nft.network = network;
+                      uniqueNfts.push(nft);
+                  }
+              }
+              
+              if (!fetchedNfts.pageKey) {
+                  break;
+              }
+              pageKeys[network] = fetchedNfts.pageKey;
+            } catch (err) {
+              console.error("Error while fetching NFTs:", err);
+          }
+      }
     }
     setPageKey(null);
     setTotalOwnedNFTs(uniqueNfts.length.toLocaleString());
@@ -172,7 +174,6 @@ useEffect(() => {
   
   const nftsToDisplay = isFiltered ? filteredNfts : nfts;
 
-
     return (
       <div>
         {isDisconnected && !ensAddress || isConnecting && !ensAddress ? (
@@ -262,6 +263,12 @@ useEffect(() => {
                           scope='col'
                           className='px-3 py-3.5 text-left text-sm font-semibold text-white'
                         >
+                          Network
+                        </th>
+                        <th
+                          scope='col'
+                          className='px-3 py-3.5 text-left text-sm font-semibold text-white'
+                        >
                           Etherscan
                         </th>
                         <th
@@ -329,6 +336,9 @@ useEffect(() => {
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                   <div className='text-white'>{nft.tokenType}</div>
+                                </td>
+                                <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
+                                  <div className='text-white'>{nft.networkName}</div>
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                 <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
