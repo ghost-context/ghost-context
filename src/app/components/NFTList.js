@@ -1,16 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { Alchemy, Network } from 'alchemy-sdk';
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 const NFTs = () => {
   const [nfts, setNfts] = useState([]);
   const { address, isConnecting, isDisconnected } = useAccount();
-  const config = {
-    apiKey: process.env.ALCHEMY_API_KEY,
-    network: Network.ETH_MAINNET,
-  };
-  const alchemy = new Alchemy(config);
+
+  const alchemy = new AlchemyMultichainClient();
 
   useEffect(() => {
     const fetchNfts = async () => {

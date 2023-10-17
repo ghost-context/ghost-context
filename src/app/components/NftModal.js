@@ -1,13 +1,11 @@
 import { Fragment, useState, useEffect   } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { useEnsName } from 'wagmi'
-import { Alchemy, Network } from "alchemy-sdk";
+import { Network } from "alchemy-sdk";
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
-const config = {
-  apiKey: process.env.ALCHEMY_API_KEY,
-  network: Network.ETH_MAINNET,
-};
-const alchemy = new Alchemy(config);
+
+const alchemy = new AlchemyMultichainClient();
 
 export default function NftModal({ onClose, address, count, contractsInCommon }) {
   const [open, setOpen] = useState(true);

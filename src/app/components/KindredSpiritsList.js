@@ -1,5 +1,6 @@
 import { useEffect, useState, useContext, useRef } from "react";
-import { Alchemy, Network } from "alchemy-sdk";
+import { Network } from "alchemy-sdk";
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import NftModal from "./NftModal";
 import { useEnsName } from "wagmi";
 import { ethers } from "ethers";
@@ -12,11 +13,7 @@ import { KindredButtonContext } from './context/KindredButtonContext';
 
 const provider = ethers.getDefaultProvider();
 
-const config = {
-  apiKey: process.env.ALCHEMY_API_KEY,
-  network: Network.ETH_MAINNET,
-};
-const alchemy = new Alchemy(config);
+const alchemy = new AlchemyMultichainClient();
 
 Modal.setAppElement('#root'); 
 

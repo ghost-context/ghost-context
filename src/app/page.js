@@ -9,7 +9,6 @@ import { configureChains, createConfig, WagmiConfig } from 'wagmi';
 import { goerli, arbitrum, mainnet, polygon, optimism } from 'wagmi/chains';
 import Hero from './components/Hero';
 import TableList from './components/NftTableList';
-import MintedNfts from './components/MintedNfts';
 import KindredSpiritsList from './components/KindredSpiritsList';
 import { EnsContext } from './components/context/EnsContext'; // Import the context
 import { useState } from 'react'; // Import the context

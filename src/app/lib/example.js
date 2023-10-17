@@ -1,5 +1,6 @@
 // Imports the Alchemy SDK
 const { Alchemy, Network } = require("alchemy-sdk");
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 // Configures the Alchemy SDK
 const config = {
@@ -8,7 +9,7 @@ const config = {
 };
 
 // Creates an Alchemy object instance with the config to use for making requests
-const alchemy = new Alchemy(config);
+const alchemy = new AlchemyMultichainClient(config);
 
 const address = "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85";
 
