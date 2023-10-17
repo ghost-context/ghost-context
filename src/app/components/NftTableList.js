@@ -63,7 +63,8 @@ export default function NftTableList() {
                   const address = nft.contract['address'];
                   if (!seenAddresses.has(address)) {
                       seenAddresses.add(address);
-                      nft.network = alchemy.getNetworkName(network);
+                      nft.networkName = alchemy.getNetworkName(network);
+                      nft.network = network;
                       uniqueNfts.push(nft);
                   }
               }
@@ -337,7 +338,7 @@ useEffect(() => {
                                   <div className='text-white'>{nft.tokenType}</div>
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                  <div className='text-white'>{nft.network}</div>
+                                  <div className='text-white'>{nft.networkName}</div>
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                 <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">

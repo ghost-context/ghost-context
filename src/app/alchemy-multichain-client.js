@@ -64,6 +64,18 @@ export class AlchemyMultichainClient {
         });
     }
 
+    get core() {
+        return new Proxy({}, {
+            get: (target, prop) => {
+                const alchemy = this.forNetwork(this.settings.network);
+                if (alchemy && typeof alchemy.core[prop] === 'function') {
+                    return alchemy.core[prop].bind(alchemy.core);
+                }
+                return undefined;
+            }
+        });
+    }
+
     getAllNetworks() {
         const settingsNetwork = this.settings.network;
         const overridesNetworks = Object.keys(this.overrides);
