@@ -63,8 +63,10 @@ export default function NftTableList() {
                   const address = nft.contract['address'];
                   if (!seenAddresses.has(address)) {
                       seenAddresses.add(address);
+                      const response = await alchemyNetwork.nft.getContractMetadata(address)
                       nft.networkName = alchemy.getNetworkName(network);
                       nft.network = network;
+                      nft.contractName = response?.name || address
                       uniqueNfts.push(nft);
                   }
               }
@@ -267,12 +269,6 @@ useEffect(() => {
                         </th>
                         <th
                           scope='col'
-                          className='px-3 py-3.5 text-left text-sm font-semibold text-white'
-                        >
-                          Etherscan
-                        </th>
-                        <th
-                          scope='col'
                           className='px-3 py-3.5 text-left text-sm font-semibold text-white '
                         >
                           Description
@@ -329,7 +325,7 @@ useEffect(() => {
                                         {nft.rawMetadata['name']}
                                       </div>
                                       <div className='mt-1 text-gray-500 text-xsm'>
-                                        {nft.contract['address']}
+                                        {nft.contractName}
                                       </div>
                                     </div>
                                   </div>
@@ -339,14 +335,6 @@ useEffect(() => {
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                   <div className='text-white'>{nft.networkName}</div>
-                                </td>
-                                <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
-          
-                                    <a href={`https://etherscan.io/address/${nft.contract['address']}`}>
-                                      View on Etherscan
-                                    </a>
-                                </span>
                                 </td>
                                 <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
                                   <NftDescription nft={nft}/>

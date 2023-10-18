@@ -303,12 +303,6 @@ useEffect(() => {
                 <span className="text-gray-400">{count}</span> out of the <span className="text-gray-400">{ownedNFTs.length}</span>
                 {" "}NFTs in common.
               </p>
-              <a
-                href={`https://etherscan.io/address/${address}`}
-                className="inline-block mx-2 text-indigo-400 bg-indigo-400/10 max-w-button ring-indigo-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto"
-              >
-                View on Etherscan
-              </a>
               <button onClick={() => downloadCsv(contractsInCommon, address)} className="inline-block mx-2 text-purple-400 bg-purple-400/10 max-w-button ring-purple-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto">
                 Download CSV
               </button>
