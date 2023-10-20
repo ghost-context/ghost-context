@@ -161,9 +161,9 @@ useEffect(() => {
           ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
           if (contractsInCommon[owner]) {
             contractsInCommon[owner].count++;
-            contractsInCommon[owner].contractsInCommon.push(nftAddress);
+            contractsInCommon[owner].contractsInCommon.push({nftAddress,nftNetwork});
           } else {
-            contractsInCommon[owner] = { count: 1, contractsInCommon: [nftAddress] };
+            contractsInCommon[owner] = { count: 1, contractsInCommon: [{nftAddress,nftNetwork}] };
           }
         });
         // clear owners array
@@ -204,6 +204,7 @@ useEffect(() => {
   
       setSortedResult(sortedResult);
       setFilteredContractsForModal(sortedResultContractsInCommon);
+      debugger
       setIsLoading(false); // hide the modal
       setScrollRequested(true);
       setSelectedNFTsContext([])

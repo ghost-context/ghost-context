@@ -63,10 +63,8 @@ export default function NftTableList() {
                   const address = nft.contract['address'];
                   if (!seenAddresses.has(address)) {
                       seenAddresses.add(address);
-                      const response = await alchemyNetwork.nft.getContractMetadata(address)
                       nft.networkName = alchemy.getNetworkName(network);
                       nft.network = network;
-                      nft.contractName = response?.name || address
                       uniqueNfts.push(nft);
                   }
               }
@@ -323,9 +321,6 @@ useEffect(() => {
                                     <div className='ml-4'>
                                       <div className='font-medium text-white'>
                                         {nft.rawMetadata['name']}
-                                      </div>
-                                      <div className='mt-1 text-gray-500 text-xsm'>
-                                        {nft.contractName}
                                       </div>
                                     </div>
                                   </div>
