@@ -14,7 +14,7 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
 
   const modalContracts = async () => {
     const result = []
-    for (const { address: nftAddress, network: nftNetwork } of contractsInCommon) {
+    for (const { nftAddress, nftNetwork } of contractsInCommon) {
       const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress)
       result.push(response.name)
     }

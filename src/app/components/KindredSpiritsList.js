@@ -61,8 +61,8 @@ const KindredSpiritsList = () => {
       contractAddresses: [ensContractAddress],
     });
   
-    for (const contract of contractsInCommon) {
-      const response = await alchemy.nft.getContractMetadata(contract);
+    for (const { nftAddress, nftNetwork } of contractsInCommon) {
+      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress);
       contractsInCsv.push(response.name || contract); // Use contract address if name is undefined
     }
   
@@ -92,7 +92,7 @@ const KindredSpiritsList = () => {
         const contractsInCommon = contract.contractsInCommon || [];
 
         // Initiate all requests at once, then wait for all to finish
-        const contractResponses = await Promise.all(contractsInCommon.map(c => alchemy.nft.getContractMetadata(c).catch(error => {
+        const contractResponses = await Promise.all(contractsInCommon.map(c => alchemy.forNetwork(c.nftNetwork).nft.getContractMetadata(c.nftAddress).catch(error => {
             console.error(`Error getting contract metadata for ${c}: ${error.message}`);
             return { name: 'Unknown' };
         })));

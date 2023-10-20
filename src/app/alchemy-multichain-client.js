@@ -45,11 +45,11 @@ export class AlchemyMultichainClient {
         }
         this.settings = settings;
         this.overrides = overrides;
-        this.networkMapping[Network.ETH_MAINNET] = "Eth Mainnet"
-        this.networkMapping[Network.MATIC_MAINNET] = "Polygon Mainnet"
-        this.networkMapping[Network.ARB_MAINNET] = "Arbitrum Mainnet"
-        this.networkMapping[Network.OPT_MAINNET] = "Optimism Mainnet"
-        this.networkMapping[Network.BASE_MAINNET] = "Base Mainnet"
+        this.networkMapping[Network.ETH_MAINNET] = "Ethereum"
+        this.networkMapping[Network.MATIC_MAINNET] = "Polygon"
+        this.networkMapping[Network.ARB_MAINNET] = "Arbitrum"
+        this.networkMapping[Network.OPT_MAINNET] = "Optimism"
+        this.networkMapping[Network.BASE_MAINNET] = "Base"
     }
 
     get nft() {
