@@ -31,16 +31,16 @@ export class AlchemyMultichainClient {
     ) {
         if (!settings) {
             settings = {
-                apiKey:  process.env.ALCHEMY_ETH_MAIN_API_KEY,
+                apiKey:  process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY,
                 network: Network.ETH_MAINNET,
             };
         }
         if (!overrides) {
             overrides = {
-                [Network.MATIC_MAINNET]: { apiKey: process.env.ALCHEMY_MATIC_MAIN_API_KEY, maxRetries: 10 },
-                [Network.ARB_MAINNET]: { apiKey: process.env.ALCHEMY_ARB_MAIN_API_KEY },
-                [Network.OPT_MAINNET]: { apiKey: process.env.ALCHEMY_OPT_MAIN_API_KEY },
-                [Network.BASE_MAINNET]: { apiKey: process.env.ALCHEMY_BASE_MAIN_API_KEY }
+                [Network.MATIC_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
+                [Network.ARB_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
+                [Network.OPT_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
+                [Network.BASE_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY }
             };
         }
         this.settings = settings;
@@ -77,9 +77,11 @@ export class AlchemyMultichainClient {
     }
 
     getAllNetworks() {
-        const settingsNetwork = this.settings.network;
-        const overridesNetworks = Object.keys(this.overrides);
-        return [...new Set([settingsNetwork, ...overridesNetworks])];
+        return Object.keys(this.networkMapping);
+    }
+
+    getNetworkMapping() {
+        return this.networkMapping;
     }
 
     getNetworkName(networkId) {

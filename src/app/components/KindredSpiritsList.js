@@ -62,8 +62,11 @@ const KindredSpiritsList = () => {
     });
   
     for (const { nftAddress, nftNetwork } of contractsInCommon) {
-      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress);
-      contractsInCsv.push(response.name || contract); // Use contract address if name is undefined
+      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress).catch(error => {
+        console.error(`Error getting contract metadata for ${nftAddress}: ${error.message}`);
+        return { };
+      })
+      contractsInCsv.push(response.name || nftAddress); // Use contract address if name is undefined
     }
   
     for (const nft of nfts.ownedNfts) {
@@ -204,7 +207,6 @@ useEffect(() => {
   
       setSortedResult(sortedResult);
       setFilteredContractsForModal(sortedResultContractsInCommon);
-      debugger
       setIsLoading(false); // hide the modal
       setScrollRequested(true);
       setSelectedNFTsContext([])
