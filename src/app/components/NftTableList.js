@@ -243,7 +243,7 @@ useEffect(() => {
                       htmlFor="name"
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
                       > Filter by network</label>
-                      <select value={networkFilter} onChange={handleNetworkFilterChange}>
+                      <select className="text-gray-900" value={networkFilter} onChange={handleNetworkFilterChange}>
                         <option value="">All Networks</option>
                         {networks.map((network, index) => (
                           <option key={index} value={network.key}>
