@@ -13,7 +13,7 @@ import KindredSpiritsList from './components/KindredSpiritsList';
 import { EnsContext } from './components/context/EnsContext'; // Import the context
 import { useState } from 'react'; // Import the context
 import { FetchDataProvider } from './components/context/KindredButtonContext';
-
+import { PatchAxios } from './axios.429.patch'
 
 export default function App() {
   const chains = [goerli, arbitrum, mainnet, polygon, optimism];
@@ -29,7 +29,7 @@ export default function App() {
     publicClient,
   });
   const ethereumClient = new EthereumClient(wagmiConfig, chains);
-
+  //PatchAxios()
   return (
     <>
       <WagmiConfig config={wagmiConfig}>

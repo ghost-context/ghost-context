@@ -14,8 +14,11 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
 
   const modalContracts = async () => {
     const result = []
-    for (const contract of contractsInCommon) {
-      const response = await alchemy.nft.getContractMetadata(contract)
+    for (const { nftAddress, nftNetwork } of contractsInCommon) {
+      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress).catch(error => {
+        console.error(`Error getting contract metadata for ${nftAddress}: ${error.message}`);
+        return { name: nftAddress };
+    })
       result.push(response.name)
     }
     return result
@@ -67,25 +70,6 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
                         alt=""
                       />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-900">
-                        <a href={`https://etherscan.io/address/${address}`} className="hover:underline">
-                          <Address address={address} />
-                        </a>
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        <a href={`https://etherscan.io/address/${address}`} className="hover:underline">
-                        <ShortAddress address={address} />
-                        </a>
-                      </p>
-                    </div>
-                    {/* <button onClick={downloadCsv}
-                      type="button"
-                      className="inline-flex items-center gap-x-1.5 rounded-md bg-indigo-600 px-1.5 py-1 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                    >
-                      <CloudArrowDownIcon className="-ml-0.5 h-5 w-5" aria-hidden="true" />
-                      Download CSV
-                    </button> */}
                   </div>
                 </div>
                <div className="text-gray-700 px-4 py-5 sm:px-6">
@@ -101,12 +85,6 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
                           <div className='text-xs'>
                           {contract ||<ShortAddress address={contractsInCommon[i]} /> }
                           </div>
-                          <a
-                            href={`https://etherscan.io/address/${contractsInCommon[i]}`}
-                            className="ml-3 mx-2 text-purple-500 bg-purple-500/10 max-w-button ring-purple-500/30 rounded-full flex-none py-1 px-2 text-xs font-medium ring-1 ring-inset"
-                          >
-                            View on Etherscan
-                          </a>
                         </li>
                       ))}
                     </ul>

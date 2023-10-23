@@ -61,9 +61,12 @@ const KindredSpiritsList = () => {
       contractAddresses: [ensContractAddress],
     });
   
-    for (const contract of contractsInCommon) {
-      const response = await alchemy.nft.getContractMetadata(contract);
-      contractsInCsv.push(response.name || contract); // Use contract address if name is undefined
+    for (const { nftAddress, nftNetwork } of contractsInCommon) {
+      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress).catch(error => {
+        console.error(`Error getting contract metadata for ${nftAddress}: ${error.message}`);
+        return { };
+      })
+      contractsInCsv.push(response.name || nftAddress); // Use contract address if name is undefined
     }
   
     for (const nft of nfts.ownedNfts) {
@@ -92,7 +95,7 @@ const KindredSpiritsList = () => {
         const contractsInCommon = contract.contractsInCommon || [];
 
         // Initiate all requests at once, then wait for all to finish
-        const contractResponses = await Promise.all(contractsInCommon.map(c => alchemy.nft.getContractMetadata(c).catch(error => {
+        const contractResponses = await Promise.all(contractsInCommon.map(c => alchemy.forNetwork(c.nftNetwork).nft.getContractMetadata(c.nftAddress).catch(error => {
             console.error(`Error getting contract metadata for ${c}: ${error.message}`);
             return { name: 'Unknown' };
         })));
@@ -161,9 +164,9 @@ useEffect(() => {
           ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
           if (contractsInCommon[owner]) {
             contractsInCommon[owner].count++;
-            contractsInCommon[owner].contractsInCommon.push(nftAddress);
+            contractsInCommon[owner].contractsInCommon.push({nftAddress,nftNetwork});
           } else {
-            contractsInCommon[owner] = { count: 1, contractsInCommon: [nftAddress] };
+            contractsInCommon[owner] = { count: 1, contractsInCommon: [{nftAddress,nftNetwork}] };
           }
         });
         // clear owners array
@@ -303,12 +306,6 @@ useEffect(() => {
                 <span className="text-gray-400">{count}</span> out of the <span className="text-gray-400">{ownedNFTs.length}</span>
                 {" "}NFTs in common.
               </p>
-              <a
-                href={`https://etherscan.io/address/${address}`}
-                className="inline-block mx-2 text-indigo-400 bg-indigo-400/10 max-w-button ring-indigo-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto"
-              >
-                View on Etherscan
-              </a>
               <button onClick={() => downloadCsv(contractsInCommon, address)} className="inline-block mx-2 text-purple-400 bg-purple-400/10 max-w-button ring-purple-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto">
                 Download CSV
               </button>

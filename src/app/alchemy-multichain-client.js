@@ -31,25 +31,25 @@ export class AlchemyMultichainClient {
     ) {
         if (!settings) {
             settings = {
-                apiKey:  process.env.ALCHEMY_ETH_MAIN_API_KEY,
+                apiKey:  process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY,
                 network: Network.ETH_MAINNET,
             };
         }
         if (!overrides) {
             overrides = {
-                [Network.MATIC_MAINNET]: { apiKey: process.env.ALCHEMY_MATIC_MAIN_API_KEY, maxRetries: 10 },
-                [Network.ARB_MAINNET]: { apiKey: process.env.ALCHEMY_ARB_MAIN_API_KEY },
-                [Network.OPT_MAINNET]: { apiKey: process.env.ALCHEMY_OPT_MAIN_API_KEY },
-                [Network.BASE_MAINNET]: { apiKey: process.env.ALCHEMY_BASE_MAIN_API_KEY }
+                [Network.MATIC_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
+                [Network.ARB_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
+                [Network.OPT_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
+                [Network.BASE_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY }
             };
         }
         this.settings = settings;
         this.overrides = overrides;
-        this.networkMapping[Network.ETH_MAINNET] = "Eth Mainnet"
-        this.networkMapping[Network.MATIC_MAINNET] = "Polygon Mainnet"
-        this.networkMapping[Network.ARB_MAINNET] = "Arbitrum Mainnet"
-        this.networkMapping[Network.OPT_MAINNET] = "Optimism Mainnet"
-        this.networkMapping[Network.BASE_MAINNET] = "Base Mainnet"
+        this.networkMapping[Network.ETH_MAINNET] = "Ethereum"
+        this.networkMapping[Network.MATIC_MAINNET] = "Polygon"
+        this.networkMapping[Network.ARB_MAINNET] = "Arbitrum"
+        this.networkMapping[Network.OPT_MAINNET] = "Optimism"
+        this.networkMapping[Network.BASE_MAINNET] = "Base"
     }
 
     get nft() {
@@ -77,9 +77,11 @@ export class AlchemyMultichainClient {
     }
 
     getAllNetworks() {
-        const settingsNetwork = this.settings.network;
-        const overridesNetworks = Object.keys(this.overrides);
-        return [...new Set([settingsNetwork, ...overridesNetworks])];
+        return Object.keys(this.networkMapping);
+    }
+
+    getNetworkMapping() {
+        return this.networkMapping;
     }
 
     getNetworkName(networkId) {

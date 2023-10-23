@@ -31,6 +31,8 @@ export default function NftTableList() {
   const [selectedNFTs, setSelectedNFTs] = useState([])
   const [isLoadingModal, setIsLoadingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [networkFilter, setNetworkFilter] = useState("");
+  const [networks, setNetworks] = useState([]);
   const [filteredNfts, setFilteredNfts] = useState([]);
   const [isFiltered, setIsFiltered] = useState(false);
   const {
@@ -41,6 +43,12 @@ export default function NftTableList() {
   } = useContext(KindredButtonContext);
   
   const alchemy = new AlchemyMultichainClient();
+
+  useEffect(() => {
+    const networkMapping = alchemy.getNetworkMapping();
+    const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
+    setNetworks(networks);
+  }, []);
 
   const fetchNfts = async (addressToFetch, key) => {
     setIsLoadingModal(true);
@@ -85,6 +93,30 @@ export default function NftTableList() {
     setIsLoadingModal(false);
 };
 
+useEffect(() => {
+  let newFilteredNfts = totalNfts;
+
+  if (networkFilter) {
+    newFilteredNfts = newFilteredNfts.filter((nft) => nft.network === networkFilter);
+  }
+
+  if (searchQuery) {
+    newFilteredNfts = newFilteredNfts.filter((nft) => {
+      if (nft.rawMetadata && nft.rawMetadata['name']) {
+        return nft.rawMetadata['name'].toLowerCase().includes(searchQuery.toLowerCase());
+      }
+      return false;
+    });
+  }
+
+  if (networkFilter || searchQuery) {
+    setFilteredNfts(newFilteredNfts);
+    setIsFiltered(true);
+  } else {
+    setIsFiltered(false);
+    setFilteredNfts(nfts);  // Reset filteredNfts to the original list
+  }
+}, [networkFilter, searchQuery, totalNfts, nfts]);
 
 useEffect(() => {
     const addressToFetch = ensAddress || (!ensAddress && address);
@@ -155,22 +187,11 @@ useEffect(() => {
   const handleSearchInputChange = (event) => {
     const nftQuery = event.target.value;
     setSearchQuery(nftQuery);
-  
-    if(nftQuery) {
-      const newFilteredNfts = totalNfts.filter((nft) => {
-        if (nft.rawMetadata && nft.rawMetadata['name']) {
-          return nft.rawMetadata['name'].toLowerCase().includes(nftQuery.toLowerCase());
-        }
-        return false;
-      });
-  
-      setFilteredNfts(newFilteredNfts);
-      setIsFiltered(true);
-    } else {
-      setIsFiltered(false);
-      setFilteredNfts(nfts);  // Reset filteredNfts to the original list
-    }
   }
+
+  const handleNetworkFilterChange = (event) => {
+    setNetworkFilter(event.target.value);
+  };
   
   const nftsToDisplay = isFiltered ? filteredNfts : nfts;
 
@@ -198,12 +219,10 @@ useEffect(() => {
                 <div className='flex justify-center'>
                   <div className="mt-2 flex rounded-md shadow-sm">
                     <div className="relative flex flex-grow items-stretch focus-within:z-10">
-                    <label
-                    htmlFor="name"
-                    className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
-                  >
-                    Filter by name
-                  </label>
+                      <label
+                      htmlFor="name"
+                      className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
+                      > Filter by name</label>
                       <div className="pointer-events-none text-xs absolute inset-y-0 left-0 flex items-center pl-3">
                         <MagnifyingGlassIcon className="h-5 w-5 pt-1 text-gray-400" aria-hidden="true" />
                       </div>
@@ -216,6 +235,22 @@ useEffect(() => {
                         className="block w-full lg:min-w-md rounded-md border-0 py-1.5 mt-1 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-purple-600 max-sm:text-xs sm:leading-6"
                         placeholder="CryptoPunk #1000"
                       />
+                    </div>
+                  </div>
+                  <div className="mt-2 ml-4 flex rounded-md shadow-sm">
+                  <div className="relative flex flex-grow items-stretch focus-within:z-10">
+                      <label
+                      htmlFor="name"
+                      className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
+                      > Filter by network</label>
+                      <select value={networkFilter} onChange={handleNetworkFilterChange}>
+                        <option value="">All Networks</option>
+                        {networks.map((network, index) => (
+                          <option key={index} value={network.key}>
+                            {network.value}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -264,12 +299,6 @@ useEffect(() => {
                           className='px-3 py-3.5 text-left text-sm font-semibold text-white'
                         >
                           Network
-                        </th>
-                        <th
-                          scope='col'
-                          className='px-3 py-3.5 text-left text-sm font-semibold text-white'
-                        >
-                          Etherscan
                         </th>
                         <th
                           scope='col'
@@ -328,9 +357,6 @@ useEffect(() => {
                                       <div className='font-medium text-white'>
                                         {nft.rawMetadata['name']}
                                       </div>
-                                      <div className='mt-1 text-gray-500 text-xsm'>
-                                        {nft.contract['address']}
-                                      </div>
                                     </div>
                                   </div>
                                 </td>
@@ -339,14 +365,6 @@ useEffect(() => {
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                   <div className='text-white'>{nft.networkName}</div>
-                                </td>
-                                <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
-          
-                                    <a href={`https://etherscan.io/address/${nft.contract['address']}`}>
-                                      View on Etherscan
-                                    </a>
-                                </span>
                                 </td>
                                 <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
                                   <NftDescription nft={nft}/>
