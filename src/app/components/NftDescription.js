@@ -13,7 +13,7 @@ export default function NftDescription({ nft }) {
       {nft && showFullDescription ? (
         <p>{nft.description}</p>
       ) : (
-        <p>{nft.description.substring(0, 20)}...</p>
+        <p>{nft.description?.substring(0, 20)}...</p>
       )}
       <span className='cursor-pointer text-white text-xsm font-bold' onClick={toggleDescription}>
         {showFullDescription ? 'See less' : 'See more'}

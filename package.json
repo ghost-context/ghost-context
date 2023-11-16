@@ -26,6 +26,7 @@
     "eth-ens-namehash": "^2.0.8",
     "ethers": "^6.4.1",
     "file-saver": "^2.0.5",
+    "lodash": "^4.17.21",
     "lokijs": "^1.5.12",
     "moralis": "^2.20.0",
     "next": "13.5.6",

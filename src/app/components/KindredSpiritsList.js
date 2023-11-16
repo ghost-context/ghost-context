@@ -213,7 +213,7 @@ useEffect(() => {
     };
   
     const getNftsForOwners = async (addressOrEns) => {
-      let nftAddressesArray = [];
+      // let nftAddressesArray = [];
       // let ownedNfts = [];
       // let currentPageKey = null;
         
@@ -233,16 +233,16 @@ useEffect(() => {
     
       setTotalOwnedNFTs(selectedNFTsContext.length.toLocaleString());
       setTotalNfts(selectedNFTsContext);    
-      // Extract the contract addresses from the ownedNfts array
-      nftAddressesArray = selectedNFTsContext.map((nft) => ({
-        address: nft.contract.address,
-        network: nft.network
-      }));     
-      if(nftAddressesArray.length) {
-        await getOwnersForContracts(nftAddressesArray, addressOrEns);
-      } else {
-        console.log("No NFT Addresses found for the owner");
-      }
+      // // Extract the contract addresses from the ownedNfts array
+      // nftAddressesArray = selectedNFTsContext.map((nft) => ({
+      //   address: nft.contract.address,
+      //   network: nft.network
+      // }));     
+      // if(nftAddressesArray.length) {
+      //   await getOwnersForContracts(nftAddressesArray, addressOrEns);
+      // } else {
+      //   console.log("No NFT Addresses found for the owner");
+      // }
     };
     
   

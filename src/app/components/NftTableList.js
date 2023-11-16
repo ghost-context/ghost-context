@@ -1,11 +1,12 @@
 import { useState, useEffect, useContext, useRef,useLayoutEffect } from 'react';
-import { Network } from 'alchemy-sdk';
 import NftDescription from './NftDescription';
 import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
 import { AlchemyMultichainClient } from '../alchemy-multichain-client';
+import { SimpleHashMultichainClient } from '../simple-hash';
+import { debounce } from 'lodash';
 
 import Modal from 'react-modal';
 
@@ -43,49 +44,17 @@ export default function NftTableList() {
   } = useContext(KindredButtonContext);
   
   const alchemy = new AlchemyMultichainClient();
+  const simpleHash = new SimpleHashMultichainClient();
 
   useEffect(() => {
-    const networkMapping = alchemy.getNetworkMapping();
+    const networkMapping = simpleHash.getNetworkMapping();
     const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
     setNetworks(networks);
   }, []);
 
   const fetchNfts = async (addressToFetch, key) => {
     setIsLoadingModal(true);
-    let ownedNfts = [];
-    let seenAddresses = new Set(); // Track seen contract addresses
-    let uniqueNfts = [];           // Store NFTs with unique contract addresses
-    const networks = alchemy.getAllNetworks();
-    const pageKeys = {};
-    for (let network of networks) {
-      const alchemyNetwork = alchemy.forNetwork(network);
-      while (true) {
-          try {
-              const fetchedNfts = await alchemyNetwork.nft.getNftsForOwner(
-                  addressToFetch,
-                  { pageKey: pageKeys[network] });
-              ownedNfts = [...ownedNfts, ...fetchedNfts.ownedNfts];
-              
-              // Filter out NFTs with duplicated contract addresses
-              for (let nft of fetchedNfts.ownedNfts) {
-                  const address = nft.contract['address'];
-                  if (!seenAddresses.has(address)) {
-                      seenAddresses.add(address);
-                      nft.networkName = alchemy.getNetworkName(network);
-                      nft.network = network;
-                      uniqueNfts.push(nft);
-                  }
-              }
-              
-              if (!fetchedNfts.pageKey) {
-                  break;
-              }
-              pageKeys[network] = fetchedNfts.pageKey;
-            } catch (err) {
-              console.error("Error while fetching NFTs:", err);
-          }
-      }
-    }
+    const uniqueNfts = await simpleHash.getNftsForOwner(addressToFetch)
     setPageKey(null);
     setTotalOwnedNFTs(uniqueNfts.length.toLocaleString());
     setTotalNfts(uniqueNfts);
@@ -102,8 +71,8 @@ useEffect(() => {
 
   if (searchQuery) {
     newFilteredNfts = newFilteredNfts.filter((nft) => {
-      if (nft.rawMetadata && nft.rawMetadata['name']) {
-        return nft.rawMetadata['name'].toLowerCase().includes(searchQuery.toLowerCase());
+      if (nft.name) {
+        return nft.name.toLowerCase().includes(searchQuery.toLowerCase());
       }
       return false;
     });
@@ -184,10 +153,10 @@ useEffect(() => {
     setShowKindredSpirits(true)
   }
 
-  const handleSearchInputChange = (event) => {
+  const handleSearchInputChange = debounce((event) => {
     const nftQuery = event.target.value;
     setSearchQuery(nftQuery);
-  }
+  }, 300);
 
   const handleNetworkFilterChange = (event) => {
     setNetworkFilter(event.target.value);
@@ -206,13 +175,13 @@ useEffect(() => {
             <div className='sm:flex sm:items-center justify-center text-center'>
               <div className='sm:flex-auto'>
                 <h2 className='text-mb-4 text-4xl text-center font-bold leading-none tracking-tight text-white md:text-3xl lg:text-4xl'>
-                  Owned NFTs
+                  Owned Collections
                 </h2>
                 <p className='mt-2 text-md text-gray-200'>
-                To summon a list of kindred spirits, please select the NFTs that you would like to analyze  👻✨
+                To summon a list of kindred spirits, please select the Collections that you would like to analyze  👻✨
                 </p>
                 <p className='mt-2 mb-5 text-md text-gray-200'>
-                  A list of <span className='font-bold'>{totalOwnedNFTs}</span> unique NFTs owned by this address. 
+                  A list of <span className='font-bold'>{totalOwnedNFTs}</span> unique Collections owned by this address. 
                   {/* Click the button to summon the kindred spirits of this address. */}
                 </p>
                 
@@ -292,12 +261,6 @@ useEffect(() => {
                           scope='col'
                           className='px-3 py-3.5 text-left text-sm font-semibold text-white'
                         >
-                          Token Type
-                        </th>
-                        <th
-                          scope='col'
-                          className='px-3 py-3.5 text-left text-sm font-semibold text-white'
-                        >
                           Network
                         </th>
                         <th
@@ -314,14 +277,13 @@ useEffect(() => {
                         <td className='relative px-7 sm:w-12 sm:px-6'>No Results</td>
                         </tr>
                       ) : ( 
-                      nftsToDisplay && !nftsToDisplay.metadataError &&
+                      nftsToDisplay  &&
                         nftsToDisplay.map((nft, i) => {
                           if (
-                            nft.media[0] &&
-                            typeof nft.media[0]['thumbnail'] !== 'undefined'
+                            nft.image_small_url
                           ) {
                             return (
-                              <tr key={nft.contract['address']+i} className={selectedNFTs.includes(nft) ? 'bg-gray-800' : undefined}>
+                              <tr key={nft.contract_address+i} className={selectedNFTs.includes(nft) ? 'bg-gray-800' : undefined}>
                                 <td className="relative px-7 sm:w-12 sm:px-6">
                                 {selectedNFTs.includes(nft) && (
                                   <div className="absolute inset-y-0 left-0 w-0.5 bg-purple-500" />
@@ -329,7 +291,7 @@ useEffect(() => {
                                   <input
                                     type="checkbox"
                                     className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                                    value={nft.contract['address']}
+                                    value={nft.contract_address}
                                     checked={selectedNFTs.includes(nft)}
                                     onChange={(e) =>
                                       setSelectedNFTs(
@@ -349,19 +311,16 @@ useEffect(() => {
                                     <div className='h-11 w-11 flex-shrink-0'>
                                       <img
                                         className='h-11 w-11 rounded-full'
-                                        src={nft.media[0]['thumbnail'] || nft.media[0]['gateway']}
-                                        alt={nft.rawMetadata['name']}
+                                        src={nft.image_small_url}
+                                        alt={nft.name}
                                       />
                                     </div>
                                     <div className='ml-4'>
                                       <div className='font-medium text-white'>
-                                        {nft.rawMetadata['name']}
+                                        {nft.name}
                                       </div>
                                     </div>
                                   </div>
-                                </td>
-                                <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                  <div className='text-white'>{nft.tokenType}</div>
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                   <div className='text-white'>{nft.networkName}</div>
@@ -411,8 +370,8 @@ useEffect(() => {
           }
         }}
       >
-        <h2 className="px-10 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 text-center font-bold text-lg">Loading NFTs</h2>🥳
-        <p className="px-10 text-center font-light text-slate-800 text-base">Please be patient, we are loading your NFTs</p>
+        <h2 className="px-10 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 text-center font-bold text-lg">Loading Collections</h2>🥳
+        <p className="px-10 text-center font-light text-slate-800 text-base">Please be patient, we are loading your Collections</p>
         <button disabled type="button" className="mt-10 text-white bg-gradient-to-r from-purple-500 to-pink-600 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center mr-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800 items-center">
           <svg aria-hidden="true" role="status" className="inline w-4 h-4 mr-3 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"/>
