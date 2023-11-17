@@ -151,11 +151,10 @@ const KindredSpiritsList = () => {
 
       for (const { address: nftAddress, network: nftNetwork } of nftAddressesArray) {
         let owners = [];
-        let response = await simpleHash.getOwnersByCollection(nftAddress);
+        let response = await simpleHash.getOwners(nftNetwork, nftAddress);
         owners = owners.concat(response.owners);
-
         while (response.next_cursor) {
-          response = await simpleHash.getOwnersByCollection(nftAddress, response.next_cursor);
+          response = await simpleHash.getOwners(nftNetwork, nftAddress, response.next_cursor);
           if (owners.length > 150000) {
             break;  // break out of the loop entirely
           }
@@ -239,8 +238,8 @@ const KindredSpiritsList = () => {
       nftAddressesArray = selectedCollectionsContext.map((nft) => ({
         address: nft.contract_address,
         network: nft.network
-      }));     
-      if(nftAddressesArray.length) {
+      }));
+      if (nftAddressesArray.length) {
         await getOwnersForContracts(nftAddressesArray, addressOrEns);
       } else {
         console.log("No Collection Addresses found for the owner");

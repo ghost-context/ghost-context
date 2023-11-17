@@ -30,6 +30,7 @@ export default function NftTableList() {
   const [selectedCollections, setSelectedCollections] = useState([])
   const [isLoadingModal, setIsLoadingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [largeCollections, setLargeCollections] = useState("");
   const [networkFilter, setNetworkFilter] = useState("");
   const [networks, setNetworks] = useState([]);
   const [filteredCollections, setFilteredCollections] = useState([]);
@@ -75,14 +76,18 @@ useEffect(() => {
     });
   }
 
-  if (networkFilter || searchQuery) {
+  if (!largeCollections) {
+    newFilteredCollections = newFilteredCollections.filter((collection) => !collection.large_collection);
+  }
+
+  if (networkFilter || searchQuery || !largeCollections) {
     setFilteredCollections(newFilteredCollections);
     setIsFiltered(true);
   } else {
     setIsFiltered(false);
     setFilteredCollections(collections);  // Reset filteredCollections to the original list
   }
-}, [networkFilter, searchQuery, totalCollections, collections]);
+}, [networkFilter, searchQuery, largeCollections, totalCollections, collections]);
 
 useEffect(() => {
     const addressToFetch = ensAddress || (!ensAddress && address);
@@ -155,6 +160,10 @@ useEffect(() => {
     setSearchQuery(collectionQuery);
   });
 
+  const handleLargeCollectionChange = ((event) => {
+    setLargeCollections(event.target.value);
+  });
+
   const handleNetworkFilterChange = (event) => {
     setNetworkFilter(event.target.value);
   };
@@ -204,7 +213,7 @@ useEffect(() => {
                     </div>
                   </div>
                   <div className="mt-2 ml-4 flex rounded-md shadow-sm">
-                  <div className="relative flex flex-grow items-stretch focus-within:z-10">
+                    <div className="relative flex flex-grow items-stretch focus-within:z-10">
                       <label
                       htmlFor="name"
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
@@ -216,6 +225,18 @@ useEffect(() => {
                             {network.value}
                           </option>
                         ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-2 ml-4 flex rounded-md shadow-sm">
+                    <div className="relative flex flex-grow items-stretch focus-within:z-10">
+                      <label
+                      htmlFor="name"
+                      className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
+                      > Large Collections</label>
+                      <select className="text-gray-900" value={largeCollections} onChange={handleLargeCollectionChange}>
+                        <option value="">Relevant</option>
+                        <option value="large">All Collections</option>                        
                       </select>
                     </div>
                   </div>
