@@ -37,17 +37,17 @@ export class SimpleHashMultichainClient {
         }
     }
 
-    transformNft (nft) {
-        if(nft.processed) return nft
-        nft = nft.collection_details
+    transformCollection(collection) {
+        if (collection.processed) return collection
+        collection = collection.collection_details
         return {
             processed: true,
-            network: nft.chains[0],
-            networkName: this.networkMapping[nft.chains[0]],
-            name: nft.name,
-            description: nft.description,
-            image_small_url:  nft.image_url,
-            contract_address: nft.collection_id,
+            network: collection.chains[0],
+            networkName: this.networkMapping[collection.chains[0]],
+            name: collection.name,
+            description: collection.description,
+            image_small_url: collection.image_url,
+            contract_address: collection.collection_id,
         }
     }
 
@@ -63,7 +63,21 @@ export class SimpleHashMultichainClient {
         return this.networkMapping[networkId] || networkId;
     }
 
-    async nftsByOwners(chains, walletId, cursor) {
+    async getOwnersByCollection(collectionId, cursor) {
+        const options = {
+            method: 'GET',
+            headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
+        };
+        try {
+            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/owners/collection/${collectionId}?limit=50&cursor=${cursor}`, options)
+            let data = await response.json();
+            data.owners = data.owners.map(owner => owner.owner_address);
+            return data;
+        } catch (err) {
+            console.error(err);
+        }
+    }
+    async collectionsByOwners(chains, walletId, cursor) {
         const options = {
             method: 'GET',
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
@@ -71,27 +85,27 @@ export class SimpleHashMultichainClient {
         try {
             const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=1&limit=20`, options)
             let data = await response.json();
-    
+
             // Extract only the required fields
-            data.collections = data.collections.map(nft => (this.transformNft(nft)));
-    
+            data.collections = data.collections.map(collection => (this.transformCollection(collection)));
+
             // If next_cursor is present, call the function recursively
             if (data.next_cursor) {
-                const nextData = await this.nftsByOwners(chains, walletId, data.next_cursor);
+                const nextData = await this.collectionsByOwners(chains, walletId, data.next_cursor);
                 // Combine current data with next data
-                nextData.collections = nextData.collections.map(nft => (this.transformNft(nft)));
+                nextData.collections = nextData.collections.map(collection => (this.transformCollection(collection)));
                 data.collections = [...data.collections, ...nextData.collections];
             }
-    
             return data;
         } catch (err) {
             console.error(err);
         }
     }
-    async getNftsForOwner(walletId) {
-
-        const data = await this.nftsByOwners(this.getChains(),walletId)
+    
+    async getCollectionsForOwner(walletId) {
+        const data = await this.collectionsByOwners(this.getChains(), walletId)
         return data.collections;
     }
+
 }
 

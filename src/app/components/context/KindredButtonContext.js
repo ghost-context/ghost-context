@@ -3,21 +3,21 @@ import { createContext, useState } from 'react';
 export const KindredButtonContext = createContext();
 
 export const FetchDataProvider = ({ children }) => {
-  const [selectedNFTsContext, setSelectedNFTsContext] = useState([]);
+  const [selectedCollectionsContext, setSelectedCollectionsContext] = useState([]);
   const [triggerKindredSpirits, setTriggerKindredSpirits] = useState(false);
-  const [ownedNFTs, setOwnedNFTs] = useState([]);
+  const [ownedCollections, setOwnedCollections] = useState([]);
   const [showKindredSpirits, setShowKindredSpirits] = useState(true);
 
 
   return (
     <KindredButtonContext.Provider
       value={{
-        selectedNFTsContext,
-        setSelectedNFTsContext,
+        selectedCollectionsContext,
+        setSelectedCollectionsContext,
         triggerKindredSpirits,
         setTriggerKindredSpirits,
-        ownedNFTs,
-        setOwnedNFTs,
+        ownedCollections,
+        setOwnedCollections,
         showKindredSpirits,
         setShowKindredSpirits
       }}

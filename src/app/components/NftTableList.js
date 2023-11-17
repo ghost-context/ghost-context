@@ -4,9 +4,7 @@ import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { SimpleHashMultichainClient } from '../simple-hash';
-import { debounce } from 'lodash';
 
 import Modal from 'react-modal';
 
@@ -18,32 +16,31 @@ function classNames(...classes) {
 Modal.setAppElement('#root'); 
 
 export default function NftTableList() {
-  const [totalNfts, setTotalNfts] = useState([]);
-  const [nfts, setNfts] = useState([]);
-  const [numNftsToShow, setNumNftsToShow] = useState(20);
+  const [totalCollections, setTotalCollections] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [numCollectionsToShow, setNumCollectionsToShow] = useState(20);
   const [isLoading, setIsLoading] = useState(false);
-  const [totalOwnedNFTs, setTotalOwnedNFTs] = useState(null);
+  const [totalOwnedCollections, setTotalOwnedCollections] = useState(null);
   const [pageKey, setPageKey] = useState(null); // Add this
   const { ensAddress } = useContext(EnsContext);
   const { address, isConnecting, isDisconnected } = useAccount();
   const checkbox = useRef()
   const [checked, setChecked] = useState(false)
   const [indeterminate, setIndeterminate] = useState(false)
-  const [selectedNFTs, setSelectedNFTs] = useState([])
+  const [selectedCollections, setSelectedCollections] = useState([])
   const [isLoadingModal, setIsLoadingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [networkFilter, setNetworkFilter] = useState("");
   const [networks, setNetworks] = useState([]);
-  const [filteredNfts, setFilteredNfts] = useState([]);
+  const [filteredCollections, setFilteredCollections] = useState([]);
   const [isFiltered, setIsFiltered] = useState(false);
   const {
-    setSelectedNFTsContext,
+    setSelectedCollectionsContext,
     setTriggerKindredSpirits,
-    setOwnedNFTs,
+    setOwnedCollections,
     setShowKindredSpirits,
   } = useContext(KindredButtonContext);
   
-  const alchemy = new AlchemyMultichainClient();
   const simpleHash = new SimpleHashMultichainClient();
 
   useEffect(() => {
@@ -52,68 +49,68 @@ export default function NftTableList() {
     setNetworks(networks);
   }, []);
 
-  const fetchNfts = async (addressToFetch, key) => {
+  const fetchCollections = async (addressToFetch, key) => {
     setIsLoadingModal(true);
-    const uniqueNfts = await simpleHash.getNftsForOwner(addressToFetch)
+    const uniqueCollections = await simpleHash.getCollectionsForOwner(addressToFetch)
     setPageKey(null);
-    setTotalOwnedNFTs(uniqueNfts.length.toLocaleString());
-    setTotalNfts(uniqueNfts);
-    setNfts(uniqueNfts.slice(0, numNftsToShow));
+    setTotalOwnedCollections(uniqueCollections.length.toLocaleString());
+    setTotalCollections(uniqueCollections);
+    setCollections(uniqueCollections.slice(0, numCollectionsToShow));
     setIsLoadingModal(false);
 };
 
 useEffect(() => {
-  let newFilteredNfts = totalNfts;
+  let newFilteredCollections = totalCollections;
 
   if (networkFilter) {
-    newFilteredNfts = newFilteredNfts.filter((nft) => nft.network === networkFilter);
+    newFilteredCollections = newFilteredCollections.filter((collection) => collection.network === networkFilter);
   }
 
   if (searchQuery) {
-    newFilteredNfts = newFilteredNfts.filter((nft) => {
-      if (nft.name) {
-        return nft.name.toLowerCase().includes(searchQuery.toLowerCase());
+    newFilteredCollections = newFilteredCollections.filter((collection) => {
+      if (collection.name) {
+        return collection.name.toLowerCase().includes(searchQuery.toLowerCase());
       }
       return false;
     });
   }
 
   if (networkFilter || searchQuery) {
-    setFilteredNfts(newFilteredNfts);
+    setFilteredCollections(newFilteredCollections);
     setIsFiltered(true);
   } else {
     setIsFiltered(false);
-    setFilteredNfts(nfts);  // Reset filteredNfts to the original list
+    setFilteredCollections(collections);  // Reset filteredCollections to the original list
   }
-}, [networkFilter, searchQuery, totalNfts, nfts]);
+}, [networkFilter, searchQuery, totalCollections, collections]);
 
 useEffect(() => {
     const addressToFetch = ensAddress || (!ensAddress && address);
     if (addressToFetch) {
-      setTotalNfts([]);  // reset the totalNfts state
-      setNumNftsToShow(20);  // reset numNftsToShow state
+      setTotalCollections([]);  // reset the totalCollections state
+      setNumCollectionsToShow(20);  // reset numCollectionsToShow state
       setPageKey(null);  // reset pageKey state
-      fetchNfts(addressToFetch, null);
-      setFilteredNfts([]);  // reset the filteredNfts state
+      fetchCollections(addressToFetch, null);
+      setFilteredCollections([]);  // reset the filteredCollections state
     }
       // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensAddress, address]);
 
   useEffect(() => {
-    setNfts(totalNfts.slice(0, numNftsToShow));
+    setCollections(totalCollections.slice(0, numCollectionsToShow));
       // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numNftsToShow]);
+  }, [numCollectionsToShow]);
 
   const handleSeeMoreClick = () => {
     setIsLoading(true);
-    if (totalNfts.length > numNftsToShow) {
-      // If there are more NFTs fetched than shown, simply increase the shown NFTs
-      setNumNftsToShow(numNftsToShow + 20);
+    if (totalCollections.length > numCollectionsToShow) {
+      // If there are more Collections fetched than shown, simply increase the shown Collections
+      setNumCollectionsToShow(numCollectionsToShow + 20);
     } else if (pageKey) {
-      // If there are no more fetched NFTs to show, fetch more
+      // If there are no more fetched Collections to show, fetch more
       const addressToFetch = ensAddress || (!ensAddress && address);
       if (addressToFetch) {
-        fetchNfts(addressToFetch, pageKey);
+        fetchCollections(addressToFetch, pageKey);
       }
     }
   };
@@ -130,39 +127,39 @@ useEffect(() => {
   
 
   useLayoutEffect(() => {
-    const isIndeterminate = selectedNFTs.length > 0 && selectedNFTs.length < nfts.length;
-    setChecked(selectedNFTs.length === nfts.length);
+    const isIndeterminate = selectedCollections.length > 0 && selectedCollections.length < collections.length;
+    setChecked(selectedCollections.length === collections.length);
     setIndeterminate(isIndeterminate);
     if (checkbox.current) {
       checkbox.current.indeterminate = isIndeterminate;
     }
-    setSelectedNFTsContext(selectedNFTs)
-  }, [selectedNFTs, nfts.length]);
+    setSelectedCollectionsContext(selectedCollections)
+  }, [selectedCollections, collections.length]);
   
 
   function toggleAll() {
-    setSelectedNFTs(checked || indeterminate ? [] : totalNfts)
+    setSelectedCollections(checked || indeterminate ? [] : totalCollections)
     setChecked(!checked && !indeterminate)
     setIndeterminate(false)
   }
   
   const handleButtonClick = () => {
-    setOwnedNFTs(selectedNFTs)
+    setOwnedCollections(selectedCollections)
     setTriggerKindredSpirits(true);
-    setSelectedNFTs([])
+    setSelectedCollections([])
     setShowKindredSpirits(true)
   }
 
-  const handleSearchInputChange = debounce((event) => {
-    const nftQuery = event.target.value;
-    setSearchQuery(nftQuery);
-  }, 300);
+  const handleSearchInputChange = ((value) => {
+    const collectionQuery = value;
+    setSearchQuery(collectionQuery);
+  });
 
   const handleNetworkFilterChange = (event) => {
     setNetworkFilter(event.target.value);
   };
   
-  const nftsToDisplay = isFiltered ? filteredNfts : nfts;
+  const collectionsToDisplay = isFiltered ? filteredCollections : collections;
 
     return (
       <div>
@@ -181,7 +178,7 @@ useEffect(() => {
                 To summon a list of kindred spirits, please select the Collections that you would like to analyze  👻✨
                 </p>
                 <p className='mt-2 mb-5 text-md text-gray-200'>
-                  A list of <span className='font-bold'>{totalOwnedNFTs}</span> unique Collections owned by this address. 
+                  A list of <span className='font-bold'>{totalOwnedCollections}</span> unique Collections owned by this address. 
                   {/* Click the button to summon the kindred spirits of this address. */}
                 </p>
                 
@@ -200,7 +197,7 @@ useEffect(() => {
                         name="search"
                         id="search"
                         value={searchQuery} 
-                        onChange={handleSearchInputChange}
+                        onChange={(event) => handleSearchInputChange(event.target.value)}
                         className="block w-full lg:min-w-md rounded-md border-0 py-1.5 mt-1 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-purple-600 max-sm:text-xs sm:leading-6"
                         placeholder="CryptoPunk #1000"
                       />
@@ -228,7 +225,7 @@ useEffect(() => {
             <div className='relative mt-8 flow-root'>
               <div className='-mx-4 -my-2 sm:-mx-6 lg:-mx-8 no-scrollbar overflow-x-auto'>
                 <div className=' inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8'>
-                {selectedNFTs.length > 0 && (
+                {selectedCollections.length > 0 && (
                 <div className="absolute left-14 top-0 flex h-12 items-center space-x-3 bg-gray-900 sm:left-12">
                   <button
                     onClick={handleButtonClick}
@@ -272,32 +269,32 @@ useEffect(() => {
                       </tr>
                     </thead>
                     <tbody className='divide-y divide-gray-200 bg-gray-900'>
-                      {nftsToDisplay.length === 0 ? (
+                      {collectionsToDisplay.length === 0 ? (
                         <tr>
                         <td className='relative px-7 sm:w-12 sm:px-6'>No Results</td>
                         </tr>
                       ) : ( 
-                      nftsToDisplay  &&
-                        nftsToDisplay.map((nft, i) => {
+                      collectionsToDisplay  &&
+                        collectionsToDisplay.map((collection, i) => {
                           if (
-                            nft.image_small_url
+                            collection.image_small_url
                           ) {
                             return (
-                              <tr key={nft.contract_address+i} className={selectedNFTs.includes(nft) ? 'bg-gray-800' : undefined}>
+                              <tr key={collection.contract_address+i} className={selectedCollections.includes(collection) ? 'bg-gray-800' : undefined}>
                                 <td className="relative px-7 sm:w-12 sm:px-6">
-                                {selectedNFTs.includes(nft) && (
+                                {selectedCollections.includes(collection) && (
                                   <div className="absolute inset-y-0 left-0 w-0.5 bg-purple-500" />
                                 )}
                                   <input
                                     type="checkbox"
                                     className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                                    value={nft.contract_address}
-                                    checked={selectedNFTs.includes(nft)}
+                                    value={collection.contract_address}
+                                    checked={selectedCollections.includes(collection)}
                                     onChange={(e) =>
-                                      setSelectedNFTs(
+                                      setSelectedCollections(
                                         e.target.checked
-                                          ? [...selectedNFTs, nft]
-                                          : selectedNFTs.filter((p) => p !== nft)
+                                          ? [...selectedCollections, collection]
+                                          : selectedCollections.filter((p) => p !== collection)
                                       )
                                     }
                                   />
@@ -305,28 +302,28 @@ useEffect(() => {
                                 <td 
                                  className={classNames(
                                   'whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-0',
-                                  selectedNFTs.includes(nft) ? 'text-purple-600' : 'text-gray-900'
+                                  selectedCollections.includes(collection) ? 'text-purple-600' : 'text-gray-900'
                                    )}>
                                   <div className='flex items-center'>
                                     <div className='h-11 w-11 flex-shrink-0'>
                                       <img
                                         className='h-11 w-11 rounded-full'
-                                        src={nft.image_small_url}
-                                        alt={nft.name}
+                                        src={collection.image_small_url}
+                                        alt={collection.name}
                                       />
                                     </div>
                                     <div className='ml-4'>
                                       <div className='font-medium text-white'>
-                                        {nft.name}
+                                        {collection.name}
                                       </div>
                                     </div>
                                   </div>
                                 </td>
                                 <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                  <div className='text-white'>{nft.networkName}</div>
+                                  <div className='text-white'>{collection.networkName}</div>
                                 </td>
                                 <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
-                                  <NftDescription nft={nft}/>
+                                  <NftDescription nft={collection}/>
                                 </td>
                               </tr>
                             );
@@ -341,7 +338,7 @@ useEffect(() => {
                     </tbody>
                   </table>
                   <div className='flex mt-4 sm:ml-16 sm:mt-0 sm:flex-none items-center max-sm:justify-start md:justify-center'>
-                  {!isFiltered && totalNfts && totalNfts.length > numNftsToShow && (
+                  {!isFiltered && totalCollections && totalCollections.length > numCollectionsToShow && (
                 <button
                   type='button'
                   className='ml-36 md:ml-0 block rounded-md bg-gradient-to-r from-purple-500 to-pink-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-smfocus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
