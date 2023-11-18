@@ -1,11 +1,6 @@
 import { Fragment, useState, useEffect   } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { useEnsName } from 'wagmi'
-import { Network } from "alchemy-sdk";
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
-
-
-const alchemy = new AlchemyMultichainClient();
 
 export default function NftModal({ onClose, address, count, contractsInCommon }) {
   const [open, setOpen] = useState(true);
@@ -14,12 +9,8 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
 
   const modalContracts = async () => {
     const result = []
-    for (const { nftAddress, nftNetwork } of contractsInCommon) {
-      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress).catch(error => {
-        console.error(`Error getting contract metadata for ${nftAddress}: ${error.message}`);
-        return { name: nftAddress };
-    })
-      result.push(response.name)
+    for (const key in contractsInCommon) {
+      result.push(contractsInCommon[key].name)
     }
     return result
   }
@@ -73,7 +64,7 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
                   </div>
                 </div>
                <div className="text-gray-700 px-4 py-5 sm:px-6">
-                  <h2 className='pb-2'>You have <span className='font-semibold'>{count}</span> contracts in common with <span className='font-semibold'>{<Address address={address} />}</span></h2>
+                  <h2 className='pb-2'>You have <span className='font-semibold'>{count}</span> collections in common with <span className='font-semibold'>{<Address address={address} />}</span></h2>
                   {loading ? (
                     <div className='flex justify-center items-center align-middle pt-1'>
                       <p className='ml-3 mx-2 text-purple-500 bg-purple-500/10 max-w-button ring-purple-500/30 rounded-md flex-none py-1 px-2 text-xs font-medium ring-1 ring-inset'>Loading...</p>
@@ -83,7 +74,7 @@ export default function NftModal({ onClose, address, count, contractsInCommon })
                       {contractsList.map((contract, i) => (
                         <li key={contract+i} className="flex justify-between items-center align-middle pt-1">
                           <div className='text-xs'>
-                          {contract ||<ShortAddress address={contractsInCommon[i]} /> }
+                          {contract }
                           </div>
                         </li>
                       ))}

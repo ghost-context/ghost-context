@@ -25,9 +25,11 @@ const KindredSpiritsList = () => {
   const [modalAddress, setModalAddress] = useState("");
   const [countForModal, setCountForModal] = useState(null);
   const [contractsInCommonModal, setContractsInCommonModal] = useState(null);
+  const [contractsInCommonData, setContractsInCommonData] = useState(null);
   // const [isModalOpen, setIsModalOpen] = useState(false);
   const [filteredContractsForModal, setFilteredContractsForModal] = useState({});
   const [totalWallets, setTotalWallets] = useState(0);
+  const [progress, setProgress] = useState(0);
   const { ensAddress } = useContext(EnsContext);
   const { address, isConnecting, isDisconnected } = useAccount();
   const [isLoading, setIsLoading] = useState(false);
@@ -93,17 +95,13 @@ const KindredSpiritsList = () => {
 
   async function downloadKindredCSV() {
     setButtonText("Downloading...");
-    const dataPromises = Object.entries(filteredContractsForModal).slice(0, 20).map(async ([address, contract]) => {
+    const dataPromises = Object.entries(contractsInCommonData).map(async ([address, contract]) => {
       const count = contract.count || 0;
-      const contractsInCommon = contract.contractsInCommon || [];
-
-      // Initiate all requests at once, then wait for all to finish
-      const contractResponses = await Promise.all(contractsInCommon.map(c => alchemy.forNetwork(c.nftNetwork).nft.getContractMetadata(c.nftAddress).catch(error => {
-        console.error(`Error getting contract metadata for ${c}: ${error.message}`);
-        return { name: 'Unknown' };
-      })));
-      const contractsInCsv = contractResponses.map(response => response.name);
-
+      const contractsInCommon = contract.contractsInCommon || {}
+      let contractsInCsv = []
+      for (const key in contractsInCommon) {
+        contractsInCsv.push(contractsInCommon[key].name)
+      }
       // Try to resolve the ENS name for the address. If it doesn't exist, use the original address.
       let ensName = address;
       try {
@@ -114,9 +112,9 @@ const KindredSpiritsList = () => {
 
       return [ensName, count, contractsInCsv.join(';')];
     });
-
+    debugger
     const data = await Promise.all(dataPromises);
-    const csv = 'EnsName | Address,Number of Connections,Contracts in Common\n' + data.map(row => row.join(',')).join('\n');
+    const csv = 'EnsName | Address,Number of Connections,Collections in Common\n' + data.map(row => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, 'kindred-spirits.csv');
     setButtonText("Download Kindred Spirits");
@@ -148,13 +146,16 @@ const KindredSpiritsList = () => {
       let contractsInCommon = {};
       // Local variable for total wallets
       let totalWalletsLocal = 0;
-
-      for (const { address: nftAddress, network: nftNetwork } of nftAddressesArray) {
+      let progress = 0;
+      setProgress(0)
+      for (const { address: nftAddress, network: nftNetwork, name } of nftAddressesArray) {
         let owners = [];
         let response = await simpleHash.getOwners(nftNetwork, nftAddress);
         owners = owners.concat(response.owners);
         while (response.next_cursor) {
           response = await simpleHash.getOwners(nftNetwork, nftAddress, response.next_cursor);
+          progress += response.owners.length
+          setProgress(progress)
           if (owners.length > 150000) {
             break;  // break out of the loop entirely
           }
@@ -166,10 +167,10 @@ const KindredSpiritsList = () => {
           ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
           if (contractsInCommon[owner]) {
             contractsInCommon[owner].count++;
-            contractsInCommon[owner].contractsInCommon.push({ nftAddress, nftNetwork });
           } else {
-            contractsInCommon[owner] = { count: 1, contractsInCommon: [{ nftAddress, nftNetwork }] };
+            contractsInCommon[owner] = { count: 1, contractsInCommon: {} };
           }
+          contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
         });
         // clear owners array
         owners = null;
@@ -185,6 +186,8 @@ const KindredSpiritsList = () => {
           .slice(0, 50)
       );
 
+      setContractsInCommonData(contractsInCommon);
+  
       const filteredContractsInCommon = Object.fromEntries(
         Object.entries(contractsInCommon)
           // .filter(([_, value]) => value.count >= 10)
@@ -216,28 +219,13 @@ const KindredSpiritsList = () => {
 
     const getNftsForOwners = async (addressOrEns) => {
       let nftAddressesArray = [];
-      // let ownedNfts = [];
-      // let currentPageKey = null;
-
-      // do {
-      //   try {
-      //     const fetchedNfts = await alchemy.nft.getNftsForOwner(addressOrEns, {
-      //       pageKey: currentPageKey,
-      //     });
-
-      //     ownedNfts = [...ownedNfts, ...fetchedNfts.ownedNfts];
-      //     currentPageKey = fetchedNfts.pageKey;
-      //   } catch (error) {
-      //     console.error("Error while fetching Collections:", error);
-      //     break;
-      //   }
-      // } while (currentPageKey);
       setTotalOwnedCollections(selectedCollectionsContext.length.toLocaleString());
       setTotalNfts(selectedCollectionsContext);
-      // Extract the contract addresses from the ownedNfts array
+      // Extract the addresses and details from the ownedNfts array
       nftAddressesArray = selectedCollectionsContext.map((nft) => ({
         address: nft.contract_address,
-        network: nft.network
+        network: nft.network,
+        name: nft.name
       }));
       if (nftAddressesArray.length) {
         await getOwnersForContracts(nftAddressesArray, addressOrEns);
@@ -281,7 +269,7 @@ const KindredSpiritsList = () => {
             Kindred Spirits
           </h2>
           <h3 className="mb-4 text-2xl text-center font-semibold leading-none tracking-tight text-gray-300 md:text-xl sm:px-15 lg:px-32">
-            We analyzed {totalWallets.toLocaleString()} unique wallet addresses across the {ownedCollections.length} Collections owned by this address and summoned {Object.entries(filteredContractsForModal).slice(0, 20).length} kindred spirits 👻✨
+            We analyzed {totalWallets.toLocaleString()} unique wallet addresses across the {ownedCollections.length} Collections owned by this address and summoned top {Object.entries(filteredContractsForModal).slice(0, 20).length} kindred spirits 👻✨
           </h3>
           <div className="flex justify-center ">
             <button onClick={downloadKindredCSV} className="mx-2 text-teal-200 bg-teal-200/10 max-w-button ring-teal-200/30 rounded-xl flex-none mb-4 py-2 px-4 text-sm font-medium ring-1 ring-inset">
@@ -307,9 +295,6 @@ const KindredSpiritsList = () => {
                     <span className="text-gray-400">{count}</span> out of the <span className="text-gray-400">{ownedCollections.length}</span>
                     {" "}Collections in common.
                   </p>
-                  <button onClick={() => downloadCsv(contractsInCommon, address)} className="inline-block mx-2 text-purple-400 bg-purple-400/10 max-w-button ring-purple-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto">
-                    Download CSV
-                  </button>
                   <button onClick={() => openModal(address)} className="inline-block mx-2 text-pink-400 bg-pink-400/10 max-w-button ring-pink-400/30 rounded-full flex-none my-2 py-1 px-2 text-xs font-medium ring-1 ring-inset ml-auto">
                     View More
                   </button>
@@ -343,7 +328,7 @@ const KindredSpiritsList = () => {
             }}
           >
             <h2 className="px-10 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 text-center font-bold text-lg">Summoning Kindred Spirits</h2>🪬
-            <p className="px-10 text-center font-light text-slate-800 text-base">Please be patient, we promise not to ghost you.</p>
+            <p className="px-10 text-center font-light text-slate-800 text-base">Please be patient, we promise not to ghost you. Processed {progress} connections</p>
             <p className="px-10 text-center font-light text-slate-800 text-base">The app may take a while to return results depending on the number of contracts and holders being analyzed. 👻</p>
             <button disabled type="button" className="mt-10 text-white bg-gradient-to-r from-purple-500 to-pink-600 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center mr-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800 items-center">
               <svg aria-hidden="true" role="status" className="inline w-4 h-4 mr-3 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
