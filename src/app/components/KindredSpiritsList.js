@@ -112,7 +112,6 @@ const KindredSpiritsList = () => {
 
       return [ensName, count, contractsInCsv.join(';')];
     });
-    debugger
     const data = await Promise.all(dataPromises);
     const csv = 'EnsName | Address,Number of Connections,Collections in Common\n' + data.map(row => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
