@@ -118,7 +118,7 @@ export class SimpleHashMultichainClient {
         }
     }
 
-    async collectionsByOwners(chains, walletId, cursor) {
+    async collectionsByOwners(chains, walletId, cursor, callback) {
         const options = {
             method: 'GET',
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
@@ -129,10 +129,11 @@ export class SimpleHashMultichainClient {
 
             // Extract only the required fields
             data.collections = data.collections.map(collection => (this.transformCollection(collection)));
+            callback(data.collections.length)
 
             // If next_cursor is present, call the function recursively
             if (data.next_cursor) {
-                const nextData = await this.collectionsByOwners(chains, walletId, data.next_cursor);
+                const nextData = await this.collectionsByOwners(chains, walletId, data.next_cursor, callback);
                 // Combine current data with next data
                 nextData.collections = nextData.collections.map(collection => (this.transformCollection(collection)));
                 data.collections = [...data.collections, ...nextData.collections];
@@ -143,7 +144,7 @@ export class SimpleHashMultichainClient {
         }
     }
 
-    async eventsByOwner(walletId, cursor) {
+    async eventsByOwner(walletId, cursor, callback) {
         const options = {
             method: 'GET',
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
@@ -154,10 +155,11 @@ export class SimpleHashMultichainClient {
 
             // Extract only the required fields
             data.nfts = data.nfts.map(collection => (this.transformEvent(collection)));
+            callback(data.nfts.length)
 
             // If next_cursor is present, call the function recursively
             if (data.next_cursor) {
-                const nextData = await this.eventsByOwner(walletId, data.next_cursor);
+                const nextData = await this.eventsByOwner(walletId, data.next_cursor, callback);
                 // Combine current data with next data
                 nextData.nfts = nextData.nfts.map(nft => (this.transformEvent(nft)));
                 data.nfts = [...data.nfts, ...nextData.nfts];
@@ -168,9 +170,9 @@ export class SimpleHashMultichainClient {
         }
     }
     
-    async getCollectionsForOwner(walletId) {
-        const data = await this.collectionsByOwners(this.getChains(), walletId)
-        const events = await this.eventsByOwner(walletId)
+    async getCollectionsForOwner(walletId, callback) {
+        const data = await this.collectionsByOwners(this.getChains(), walletId, null, callback)
+        const events = await this.eventsByOwner(walletId,null,callback)
         return [...data.collections,...events.nfts]
     }
 
