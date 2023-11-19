@@ -197,7 +197,7 @@ export default function NftTableList() {
                 {/* Click the button to summon the kindred spirits of this address. */}
               </p>
 
-              <div className='flex justify-center'>
+              <div className='flex flex-col sm:flex-row justify-center'>
                 <div className="mt-2 flex rounded-md shadow-sm">
                   <div className="relative flex flex-grow items-stretch focus-within:z-10">
                     <label
@@ -218,13 +218,13 @@ export default function NftTableList() {
                     />
                   </div>
                 </div>
-                <div className="mt-2 ml-4 flex rounded-md shadow-sm">
+                <div className="mt-2 ml-0 sm:ml-4 flex rounded-md shadow-sm">
                   <div className="relative flex flex-grow items-stretch focus-within:z-10">
                     <label
                       htmlFor="name"
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
                     > Filter by network</label>
-                    <select className="text-gray-900" value={networkFilter} onChange={handleNetworkFilterChange}>
+                    <select className="text-gray-900 w-full" value={networkFilter} onChange={handleNetworkFilterChange}>
                       <option value="">All Networks</option>
                       {networks.map((network, index) => (
                         <option key={index} value={network.key}>
@@ -234,13 +234,13 @@ export default function NftTableList() {
                     </select>
                   </div>
                 </div>
-                <div className="mt-2 ml-4 flex rounded-md shadow-sm">
+                <div className="mt-2 ml-0 sm:ml-4 flex rounded-md shadow-sm">
                   <div className="relative flex flex-grow items-stretch focus-within:z-10">
                     <label
                       htmlFor="name"
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
                     > Large Collections</label>
-                    <select className="text-gray-900" value={largeCollections} onChange={handleLargeCollectionChange}>
+                    <select className="text-gray-900 w-full" value={largeCollections} onChange={handleLargeCollectionChange}>
                       <option value="">Relevant</option>
                       <option value="large">All Collections</option>
                     </select>

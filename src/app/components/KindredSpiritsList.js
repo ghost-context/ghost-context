@@ -164,12 +164,13 @@ const KindredSpiritsList = () => {
 
         owners.forEach((owner) => {
           ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
-          if (contractsInCommon[owner]) {
-            contractsInCommon[owner].count++;
-          } else {
-            contractsInCommon[owner] = { count: 1, contractsInCommon: {} };
+          if (!contractsInCommon[owner]) {
+            contractsInCommon[owner] = { count: 0, contractsInCommon: {} };
           }
-          contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
+          if(!contractsInCommon[owner].contractsInCommon[nftAddress]) {
+            contractsInCommon[owner].count++;
+            contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
+          }
         });
         // clear owners array
         owners = null;
@@ -195,10 +196,10 @@ const KindredSpiritsList = () => {
       );
 
       delete filteredResult[
-        targetAddress.toLocaleLowerCase()
+        targetAddress
       ];
       delete filteredContractsInCommon[
-        targetAddress.toLocaleLowerCase()
+        targetAddress
       ];
 
       const sortedResult = Object.entries(filteredResult)
@@ -275,7 +276,7 @@ const KindredSpiritsList = () => {
               {buttonText}
             </button>
           </div>
-          <div className="flex justify-center">
+          <div className="flex justify-center m-5">
             <ul role="list" className="divide-y">
               {Object.entries(filteredContractsForModal).slice(0, 20).map(([address, { count, contractsInCommon }]) => (
                 <li key={address} className="py-4">
