@@ -49,6 +49,7 @@ export class SimpleHashMultichainClient {
             name: collection.name,
             description: `${collection.description??''} contains ${collection.distinct_owner_count} owners `,
             image_small_url: collection.image_url,
+            distinct_owner_count: collection.distinct_owner_count,
             contract_address: collection.collection_id,
             large_collection: collection.distinct_owner_count > this.BIG_COLLECTION
         }
@@ -109,7 +110,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/owners/collection/${collectionId}?limit=50&cursor=${cursor}`, options)
+            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/owners/collection/${collectionId}?limit=1000&cursor=${cursor}`, options)
             let data = await response.json();
             data.owners = data.owners.map(owner => owner.owner_address);
             return data;
@@ -124,7 +125,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=99&limit=20`, options)
+            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=99&limit=50`, options)
             let data = await response.json();
 
             // Extract only the required fields

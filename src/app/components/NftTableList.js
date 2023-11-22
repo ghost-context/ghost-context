@@ -267,13 +267,7 @@ export default function NftTableList() {
                   <thead>
                     <tr>
                       <th scope="col" className="relative px-7 sm:w-12 sm:px-6">
-                        <input
-                          type="checkbox"
-                          className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                          ref={checkbox}
-                          checked={checked}
-                          onChange={toggleAll}
-                        />
+                        
                       </th>
                       <th
                         scope='col'
@@ -286,6 +280,12 @@ export default function NftTableList() {
                         className='px-3 py-3.5 text-left text-sm font-semibold text-white'
                       >
                         Network
+                      </th>
+                      <th
+                        scope='col'
+                        className='px-3 py-3.5 text-left text-sm font-semibold text-white'
+                      >
+                        #Owners
                       </th>
                       <th
                         scope='col'
@@ -348,6 +348,9 @@ export default function NftTableList() {
                               </td>
                               <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
                                 <div className='text-white'>{collection.networkName}</div>
+                              </td>
+                              <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
+                                <div className='text-white'>{collection.distinct_owner_count}</div>
                               </td>
                               <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
                                 <NftDescription nft={collection} />
