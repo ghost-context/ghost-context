@@ -2,6 +2,7 @@ import { useEffect, useState, useContext, useRef } from "react";
 import { Network } from "alchemy-sdk";
 import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { SimpleHashMultichainClient } from '../simple-hash';
+import { AirStackClient } from '../airstack';
 
 import NftModal from "./NftModal";
 import { useEnsName } from "wagmi";
@@ -11,12 +12,13 @@ import { useAccount } from 'wagmi';
 import Modal from 'react-modal';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
-
+import { SocialCard } from './SocialCard'
 
 const provider = ethers.getDefaultProvider();
 
 const alchemy = new AlchemyMultichainClient();
 const simpleHash = new SimpleHashMultichainClient();
+const airstack = new AirStackClient();
 
 Modal.setAppElement('#root');
 
@@ -280,16 +282,7 @@ const KindredSpiritsList = () => {
             <ul role="list" className="divide-y">
               {Object.entries(filteredContractsForModal).slice(0, 20).map(([address, { count, contractsInCommon }]) => (
                 <li key={address} className="py-4">
-                  <div className="flex items-center gap-x-3">
-                    <img
-                      src="/kindredSpirit.png"
-                      alt={`Kindred Spirit with ${count} connections`}
-                      className="h-6 w-6 flex-none rounded-full bg-gray-800"
-                    />
-                    <h3 className="flex-auto truncate text-sm font-semibold leading-6 text-white">
-                      <Address address={address} />
-                    </h3>
-                  </div>
+                  <SocialCard airstack={airstack} address={address} count={count}/>
                   <p className="mt-3 truncate text-sm text-gray-500">
                     This address holds{" "}
                     <span className="text-gray-400">{count}</span> out of the <span className="text-gray-400">{ownedCollections.length}</span>
@@ -300,6 +293,7 @@ const KindredSpiritsList = () => {
                   </button>
                   {selectedModal === address && (
                     <NftModal
+                      airstack={airstack}
                       address={modalAddress}
                       count={countForModal}
                       contractsInCommon={contractsInCommonModal}
@@ -343,34 +337,8 @@ const KindredSpiritsList = () => {
   );
 };
 
-const ShortAddress = ({ address }) => {
-  const prefix = address.slice(0, 4);
-  const suffix = address.slice(-4);
-  const shortAddress = `${prefix}...${suffix}`;
 
-  return (
-    <div>{shortAddress}</div>
-  )
-}
 
-const Address = ({ address }) => {
-  const { data, isError, isLoading } = useEnsName({
-    address: address,
-    chainId: 1,
-  });
-
-  return (
-    <>
-      {isLoading ? (
-        address
-      ) : isError ? (
-        address
-      ) : (
-        data || <ShortAddress address={address} />
-      )}
-    </>
-  );
-};
 
 
 
