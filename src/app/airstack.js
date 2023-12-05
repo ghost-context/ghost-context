@@ -28,7 +28,15 @@ export class AirStackClient {
         const variables = { address: address }
 
         const { data, error } = await fetchQuery(query, variables, {});
-        return data?.social?.Social
+        let socialData = data?.social?.Social
+        return socialData?.map((social) => {
+            if (social.dappName === 'lens') {
+              social.link = `https://hey.xyz/u/${social.profileName.split('/@')[1]}`;
+            } else {
+              social.link = `https://warpcast.com/${social.profileName}`;
+            }
+            return social;
+          });
     }
 
 }

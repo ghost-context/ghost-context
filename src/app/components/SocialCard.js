@@ -32,15 +32,17 @@ export const SocialCard = ({ airstack, count, address , inModal }) => {
       <div className="flex flex-wrap">
         {Array.isArray(socials) && socials.map((social, index) => (
           <div key={index} className="flex items-center mr-2">
-            <img 
-              src={`/networks/${social.dappName}.svg`} 
-              alt={social.dappName} 
-              title={social.profileName} 
-              className="h-4 w-4 mr-2" 
-            />
+            <a href={social.link} target="_blank" rel="noopener noreferrer">
+                <img 
+                    src={`/networks/${social.dappName}.svg`} 
+                    alt={social.dappName} 
+                    title={social.profileName} 
+                    className="h-4 w-4 mr-2" 
+                />
+            </a>
             {inModal ? (
                 <div className="flex flex-col text-sm leading-6">
-                <span>{social.profileName} - f {social.followerCount} , fo {social.followingCount}</span>
+                <a target="_blank" href={social.link}>{social.profileName}</a>
                 </div>
             ) : null}
           </div>
