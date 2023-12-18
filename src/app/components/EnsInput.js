@@ -20,14 +20,13 @@
       chainId: 1,
     });
     const { setEnsAddress } = useContext(EnsContext); // Consume the context
-
     useEffect(() => {
       try {
-        if (!isError && !isLoading && data && !ensNameOrAddress.startsWith('0x')) {
+        if (!isError && !isLoading && data ) {
           setEnsAddress(data);
           setShowKindredSpirits(false);
         }
-        if (!addressError && !isLoadingAddress && !data && dataAddress && ensNameOrAddress.startsWith('0x')) {
+        if (!addressError && !isLoadingAddress && !data && dataAddress ) {
           setEnsAddress(dataAddress);
           setShowKindredSpirits(false);
         }
