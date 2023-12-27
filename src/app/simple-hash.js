@@ -6,12 +6,18 @@ export class SimpleHashMultichainClient {
         this.networkMapping["poap"] = "POAP"
         this.networkMapping["ethereum"] = "Ethereum"
         this.networkMapping["polygon"] = "Polygon"
+        this.networkMapping["bitcoin"] = "Bitcoin"
         this.networkMapping["arbitrum"] = "Arbitrum"
         this.networkMapping["optimism"] = "Optimism"
         this.networkMapping["base"] = "Base"
         this.networkMapping["solana"] = "Solana"
         this.networkMapping["gnosis"] = "Gnosis"
         this.networkMapping["zora"] = "Zora"
+        this.networkMapping["avalanche"] = "Avalanche"
+        this.networkMapping["celo"] = "Celo"
+        this.networkMapping["linea"] = "Linea"
+        this.networkMapping["manta"] = "Manta"
+        this.networkMapping["loot"] = "Loot"
         this.api_key = process.env.NEXT_PUBLIC_SIMPLEHASH_API_KEY
     }
 
@@ -39,12 +45,26 @@ export class SimpleHashMultichainClient {
         }
     }
 
-    transformCollection(collection) {
+    async transformCollection(collection) {
         if (collection.processed) return collection
+        let nft_ids = collection.nft_ids;
         collection = collection.collection_details
+        if(!collection.image_url && nft_ids && nft_ids.length) {
+            //We dont have collection data, lets get it from the nft
+            let nft_id = nft_ids[0]
+            //Split to chain, id and token by dot
+            let [chain, contract, token] = nft_id.split('.');
+            let data = await this.getNTFbyId(chain,contract,token)
+            if(data) {
+                collection.name = data.name
+                collection.image_url = data.image_url
+                collection.description = data.description
+            }
+        }
         return {
             processed: true,
             network: collection.chains[0],
+            chains: collection.chains,
             networkName: this.networkMapping[collection.chains[0]],
             name: collection.name,
             description: `${collection.description??''} contains ${collection.distinct_owner_count} owners `,
@@ -60,6 +80,7 @@ export class SimpleHashMultichainClient {
         return {
             processed: true,
             network: "poap",
+            chains: ["poap"],
             networkName: "POAP",
             name: nft.name,
             description: nft.description??'',
@@ -86,6 +107,21 @@ export class SimpleHashMultichainClient {
             return await this.getOwnersByEvent(id, cursor)
         } else {
             return await this.getOwnersByCollection(id, cursor)
+        }
+    }
+
+    async getNTFbyId(chain,contract,token) {
+        const options = {
+            method: 'GET',
+            headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
+        };
+        try {
+            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/${chain}/${contract}/${token}`, options)
+            let data = await response.json();
+            let {name,description,image_url} = data;
+            return {name,description,image_url};
+        } catch (err) {
+            console.error(err);
         }
     }
 
@@ -125,18 +161,17 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=99&limit=50`, options)
+            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=99&limit=50`, options)
             let data = await response.json();
 
             // Extract only the required fields
-            data.collections = data.collections.map(collection => (this.transformCollection(collection)));
-            callback(data.collections.length)
-
+            data.collections = await Promise.all(data.collections.map(collection => this.transformCollection(collection)));
+            callback(data.collections.length);
             // If next_cursor is present, call the function recursively
             if (data.next_cursor) {
                 const nextData = await this.collectionsByOwners(chains, walletId, data.next_cursor, callback);
                 // Combine current data with next data
-                nextData.collections = nextData.collections.map(collection => (this.transformCollection(collection)));
+                nextData.collections = await Promise.all(nextData.collections.map(collection => this.transformCollection(collection)));
                 data.collections = [...data.collections, ...nextData.collections];
             }
             return data;
