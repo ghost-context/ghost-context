@@ -186,7 +186,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=100&limit=50`, options)
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&limit=50`, options)
 
             // Extract only the required fields
             data.collections = await Promise.all(data.collections.map(collection => this.transformCollection(collection)));
