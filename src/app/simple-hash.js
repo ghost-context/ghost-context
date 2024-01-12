@@ -33,8 +33,7 @@ export class SimpleHashMultichainClient {
         };
 
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/ens/reverse_lookup?wallet_addresses=${ownersParams}`, options)
-            const data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/ens/reverse_lookup?wallet_addresses=${ownersParams}`, options)
             const map = data.reduce((acc, obj) => {
                 acc[obj.address] = obj.ens;
                 return acc;
@@ -49,7 +48,12 @@ export class SimpleHashMultichainClient {
         if (collection.processed) return collection
         let nft_ids = collection.nft_ids;
         collection = collection.collection_details
-        if(!collection.image_url && nft_ids && nft_ids.length) {
+        const spamIndicators = ["winner", "voucher", "reward", "$"];
+        let isSpam = spamIndicators.some(indicator =>
+            collection.name?.toLowerCase().includes(indicator) ||
+            collection.description?.toLowerCase().includes(indicator)
+        );
+        if(!collection.image_url && nft_ids && nft_ids.length && !isSpam) {
             //We dont have collection data, lets get it from the nft
             let nft_id = nft_ids[0]
             //Split to chain, id and token by dot
@@ -61,6 +65,10 @@ export class SimpleHashMultichainClient {
                 collection.description = data.description
             }
         }
+        isSpam = spamIndicators.some(indicator =>
+            collection.name?.toLowerCase().includes(indicator) ||
+            collection.description?.toLowerCase().includes(indicator)
+        );
         return {
             processed: true,
             network: collection.chains[0],
@@ -71,7 +79,7 @@ export class SimpleHashMultichainClient {
             image_small_url: collection.image_url,
             distinct_owner_count: collection.distinct_owner_count,
             contract_address: collection.collection_id,
-            large_collection: collection.distinct_owner_count > this.BIG_COLLECTION
+            large_collection: (collection.distinct_owner_count > this.BIG_COLLECTION) || isSpam
         }
     }
 
@@ -116,8 +124,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/${chain}/${contract}/${token}`, options)
-            let data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/${chain}/${contract}/${token}`, options)
             let {name,description,image_url} = data;
             return {name,description,image_url};
         } catch (err) {
@@ -131,8 +138,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/poap_event/${eventId}?limit=50&cursor=${cursor}`, options)
-            let data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/poap_event/${eventId}?limit=50&cursor=${cursor}`, options)
             data.owners = data.nfts.map(nft => nft.owners.map(owner => owner.owner_address));
             return data;
         } catch (err) {
@@ -146,8 +152,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/owners/collection/${collectionId}?limit=1000&cursor=${cursor}`, options)
-            let data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/owners/collection/${collectionId}?limit=1000&cursor=${cursor}`, options)
             data.owners = data.owners.map(owner => owner.owner_address);
             return data;
         } catch (err) {
@@ -155,14 +160,33 @@ export class SimpleHashMultichainClient {
         }
     }
 
-    async collectionsByOwners(chains, walletId, cursor, callback) {
+    async fetchWithBackoff(url, options, retries = 10, backoff = 300) {
+        try {
+          const response = await fetch(url, options);
+          if (!response.ok) {
+            if (response.status === 429 && retries > 0) {
+              console.log("RETRY",retries, backoff )
+              // Wait for the backoff duration before retrying
+              await new Promise(resolve => setTimeout(resolve, backoff));
+              // Retry the fetch with an increased backoff and one less retry
+              return await fetchWithBackoff(url, options, retries - 1, backoff * 2);
+            }
+            throw new Error(`Request failed with status: ${response.status}`);
+          }
+          return await response.json();
+        } catch (error) {
+          console.error('Fetch failed:', error);
+          throw error;
+        }
+      }
+      
+     async collectionsByOwners(chains, walletId, cursor, callback) {
         const options = {
             method: 'GET',
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=99&limit=50`, options)
-            let data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&spam_score__lte=100&limit=50`, options)
 
             // Extract only the required fields
             data.collections = await Promise.all(data.collections.map(collection => this.transformCollection(collection)));
@@ -186,8 +210,7 @@ export class SimpleHashMultichainClient {
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
         try {
-            const response = await fetch(`https://api.simplehash.com/api/v0/nfts/owners?chains=gnosis,ethereum&wallet_addresses=${walletId}&contract_addresses=0x22C1f6050E56d2876009903609a2cC3fEf83B415&cursor=${cursor}&limit=50`, options)
-            let data = await response.json();
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/owners?chains=gnosis,ethereum&wallet_addresses=${walletId}&contract_addresses=0x22C1f6050E56d2876009903609a2cC3fEf83B415&cursor=${cursor}&limit=50`, options)
 
             // Extract only the required fields
             data.nfts = data.nfts.map(collection => (this.transformEvent(collection)));
