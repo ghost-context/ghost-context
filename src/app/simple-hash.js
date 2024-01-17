@@ -165,11 +165,10 @@ export class SimpleHashMultichainClient {
           const response = await fetch(url, options);
           if (!response.ok) {
             if (response.status === 429 && retries > 0) {
-              console.log("RETRY",retries, backoff )
               // Wait for the backoff duration before retrying
               await new Promise(resolve => setTimeout(resolve, backoff));
               // Retry the fetch with an increased backoff and one less retry
-              return await fetchWithBackoff(url, options, retries - 1, backoff * 2);
+              return await this.fetchWithBackoff(url, options, retries - 1, backoff * 2);
             }
             throw new Error(`Request failed with status: ${response.status}`);
           }
