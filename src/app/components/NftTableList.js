@@ -66,6 +66,7 @@ export default function NftTableList() {
     setIsLoadingModal(false);
   };
 
+  
   useEffect(() => {
     let newFilteredCollections = totalCollections;
 
@@ -82,13 +83,11 @@ export default function NftTableList() {
       });
     }
 
-    if (!collectionFilter) {
-      if(collectionFilter == "large") {
-        newFilteredCollections = newFilteredCollections.filter((collection) => !collection.large_collection);
-      }
+    if(collectionFilter !== "large") {
+      newFilteredCollections = newFilteredCollections.filter((collection) => !collection.large_collection);
     }
 
-    if (networkFilter || searchQuery || !collectionFilter) {
+    if (networkFilter || searchQuery || collectionFilter ) {
       setFilteredCollections(newFilteredCollections);
       setIsFiltered(true);
     } else {
@@ -107,7 +106,8 @@ export default function NftTableList() {
       setFilteredCollections([]);  // reset the filteredCollections state
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensAddress, address]);
+  }, [ensAddress, address, collectionFilter]);
+
 
   useEffect(() => {
     setCollections(totalCollections.slice(0, numCollectionsToShow));
@@ -243,8 +243,8 @@ export default function NftTableList() {
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
                     > Filter Collections</label>
                     <select className="text-gray-900 w-full" value={collectionFilter} onChange={handleCollectionFilterChange}>
-                      <option value="">Relevant</option>
-                      <option value="spam">Lenient Spam Filter</option>
+                      <option value="relevant">Relevant</option>
+                      <option value="includespam">Lenient Spam Filter</option>
                       <option value="large">All Collections</option>
                     </select>
                   </div>
