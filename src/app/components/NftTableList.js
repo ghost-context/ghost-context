@@ -31,7 +31,7 @@ export default function NftTableList() {
   const [selectedCollections, setSelectedCollections] = useState([])
   const [isLoadingModal, setIsLoadingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [largeCollections, setLargeCollections] = useState("");
+  const [collectionFilter, setcollectionFilter] = useState("relevant");
   const [networkFilter, setNetworkFilter] = useState("");
   const [networks, setNetworks] = useState([]);
   const [filteredCollections, setFilteredCollections] = useState([]);
@@ -51,11 +51,11 @@ export default function NftTableList() {
     setNetworks(networks);
   }, []);
 
-  const fetchCollections = async (addressToFetch, key) => {
+  const fetchCollections = async (addressToFetch, filter) => {
     setProgress(0)
     let fetchCount=0
     setIsLoadingModal(true);
-    const uniqueCollections = await simpleHash.getCollectionsForOwner(addressToFetch, (count) => {
+    const uniqueCollections = await simpleHash.getCollectionsForOwner(addressToFetch, filter, (count) => {
       fetchCount += count
       setProgress(fetchCount)
     })
@@ -66,6 +66,7 @@ export default function NftTableList() {
     setIsLoadingModal(false);
   };
 
+  
   useEffect(() => {
     let newFilteredCollections = totalCollections;
 
@@ -82,18 +83,18 @@ export default function NftTableList() {
       });
     }
 
-    if (!largeCollections) {
+    if(collectionFilter !== "large") {
       newFilteredCollections = newFilteredCollections.filter((collection) => !collection.large_collection);
     }
 
-    if (networkFilter || searchQuery || !largeCollections) {
+    if (networkFilter || searchQuery || collectionFilter ) {
       setFilteredCollections(newFilteredCollections);
       setIsFiltered(true);
     } else {
       setIsFiltered(false);
       setFilteredCollections(collections);  // Reset filteredCollections to the original list
     }
-  }, [networkFilter, searchQuery, largeCollections, totalCollections, collections]);
+  }, [networkFilter, searchQuery, collectionFilter, totalCollections, collections]);
 
   useEffect(() => {
     const addressToFetch = ensAddress || (!ensAddress && address);
@@ -101,11 +102,12 @@ export default function NftTableList() {
       setTotalCollections([]);  // reset the totalCollections state
       setNumCollectionsToShow(20);  // reset numCollectionsToShow state
       setPageKey(null);  // reset pageKey state
-      fetchCollections(addressToFetch, null);
+      fetchCollections(addressToFetch, collectionFilter);
       setFilteredCollections([]);  // reset the filteredCollections state
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensAddress, address]);
+  }, [ensAddress, address, collectionFilter]);
+
 
   useEffect(() => {
     setCollections(totalCollections.slice(0, numCollectionsToShow));
@@ -121,7 +123,7 @@ export default function NftTableList() {
       // If there are no more fetched Collections to show, fetch more
       const addressToFetch = ensAddress || (!ensAddress && address);
       if (addressToFetch) {
-        fetchCollections(addressToFetch, pageKey);
+        fetchCollections(addressToFetch, collectionFilter);
       }
     }
   };
@@ -166,8 +168,8 @@ export default function NftTableList() {
     setSearchQuery(collectionQuery);
   });
 
-  const handleLargeCollectionChange = ((event) => {
-    setLargeCollections(event.target.value);
+  const handleCollectionFilterChange = ((event) => {
+    setcollectionFilter(event.target.value);
   });
 
   const handleNetworkFilterChange = (event) => {
@@ -239,9 +241,10 @@ export default function NftTableList() {
                     <label
                       htmlFor="name"
                       className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
-                    > Large Collections</label>
-                    <select className="text-gray-900 w-full" value={largeCollections} onChange={handleLargeCollectionChange}>
-                      <option value="">Relevant</option>
+                    > Filter Collections</label>
+                    <select className="text-gray-900 w-full" value={collectionFilter} onChange={handleCollectionFilterChange}>
+                      <option value="relevant">Relevant</option>
+                      <option value="includespam">Lenient Spam Filter</option>
                       <option value="large">All Collections</option>
                     </select>
                   </div>

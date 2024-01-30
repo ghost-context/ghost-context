@@ -44,15 +44,25 @@ export class SimpleHashMultichainClient {
         }
     }
 
+    spaminName(collection) {
+        const spamIndicators = ["winner", "voucher", "reward", "$"];
+        return spamIndicators.some(indicator =>
+            collection.name?.toLowerCase().includes(indicator)
+        )
+    }
+
+    spaminDescription(collection) {
+        const spamIndicators = ["winner", "voucher", "$"];
+        return spamIndicators.some(indicator =>
+            collection.description?.toLowerCase().includes(indicator)
+        )
+    }
+
     async transformCollection(collection) {
         if (collection.processed) return collection
         let nft_ids = collection.nft_ids;
         collection = collection.collection_details
-        const spamIndicators = ["winner", "voucher", "reward", "$"];
-        let isSpam = spamIndicators.some(indicator =>
-            collection.name?.toLowerCase().includes(indicator) ||
-            collection.description?.toLowerCase().includes(indicator)
-        );
+        let isSpam = this.spaminName(collection) || this.spaminDescription(collection)
         if(!collection.image_url && nft_ids && nft_ids.length && !isSpam) {
             //We dont have collection data, lets get it from the nft
             let nft_id = nft_ids[0]
@@ -65,10 +75,7 @@ export class SimpleHashMultichainClient {
                 collection.description = data.description
             }
         }
-        isSpam = spamIndicators.some(indicator =>
-            collection.name?.toLowerCase().includes(indicator) ||
-            collection.description?.toLowerCase().includes(indicator)
-        );
+        isSpam = this.spaminName(collection) || this.spaminDescription(collection)
         return {
             processed: true,
             network: collection.chains[0],
@@ -179,20 +186,21 @@ export class SimpleHashMultichainClient {
         }
       }
       
-     async collectionsByOwners(chains, walletId, cursor, callback) {
+     async collectionsByOwners(chains, walletId, filter, cursor, callback) {
         const options = {
             method: 'GET',
             headers: { accept: 'application/json', 'X-API-KEY': this.api_key }
         };
+        const spamFilter =  filter == 'relevant' ? '&spam_score__lte=99' : ''
         try {
-            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}&wallet_addresses=${walletId}&limit=50`, options)
+            const data = await this.fetchWithBackoff(`https://api.simplehash.com/api/v0/nfts/collections_by_wallets_v2?nft_ids=1&chains=${chains}&cursor=${cursor}${spamFilter}&wallet_addresses=${walletId}&limit=50`, options)
 
             // Extract only the required fields
             data.collections = await Promise.all(data.collections.map(collection => this.transformCollection(collection)));
             callback(data.collections.length);
             // If next_cursor is present, call the function recursively
             if (data.next_cursor) {
-                const nextData = await this.collectionsByOwners(chains, walletId, data.next_cursor, callback);
+                const nextData = await this.collectionsByOwners(chains, walletId, filter, data.next_cursor, callback);
                 // Combine current data with next data
                 nextData.collections = await Promise.all(nextData.collections.map(collection => this.transformCollection(collection)));
                 data.collections = [...data.collections, ...nextData.collections];
@@ -228,8 +236,8 @@ export class SimpleHashMultichainClient {
         }
     }
     
-    async getCollectionsForOwner(walletId, callback) {
-        const data = await this.collectionsByOwners(this.getChains(), walletId, null, callback)
+    async getCollectionsForOwner(walletId, filter, callback) {
+        const data = await this.collectionsByOwners(this.getChains(), walletId, filter, null, callback)
         const events = await this.eventsByOwner(walletId,null,callback)
         return [...data.collections,...events.nfts]
     }
