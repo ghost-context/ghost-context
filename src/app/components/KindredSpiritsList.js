@@ -1,7 +1,7 @@
 import { useEffect, useState, useContext, useRef } from "react";
 import { Network } from "alchemy-sdk";
 import { AlchemyMultichainClient } from '../alchemy-multichain-client';
-import { SimpleHashMultichainClient } from '../simple-hash';
+// import { SimpleHashMultichainClient } from '../simple-hash'; // Migrated to Alchemy
 import { AirStackClient } from '../airstack';
 
 import NftModal from "./NftModal";
@@ -17,7 +17,7 @@ import { SocialCard } from './SocialCard'
 const provider = ethers.getDefaultProvider();
 
 const alchemy = new AlchemyMultichainClient();
-const simpleHash = new SimpleHashMultichainClient();
+// const simpleHash = new SimpleHashMultichainClient(); // Migrated to use alchemy instead
 const airstack = new AirStackClient();
 
 Modal.setAppElement('#root');
@@ -151,10 +151,10 @@ const KindredSpiritsList = () => {
       setProgress(0)
       for (const { address: nftAddress, network: nftNetwork, name } of nftAddressesArray) {
         let owners = [];
-        let response = await simpleHash.getOwners(nftNetwork, nftAddress);
+        let response = await alchemy.getOwners(nftNetwork, nftAddress);
         owners = owners.concat(response.owners);
         while (response.next_cursor) {
-          response = await simpleHash.getOwners(nftNetwork, nftAddress, response.next_cursor);
+          response = await alchemy.getOwners(nftNetwork, nftAddress, response.next_cursor);
           progress += response.owners.length
           setProgress(progress)
           if (owners.length > 150000) {

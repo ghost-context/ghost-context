@@ -4,7 +4,7 @@ import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { SimpleHashMultichainClient } from '../simple-hash';
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 import Modal from 'react-modal';
 
@@ -43,10 +43,10 @@ export default function NftTableList() {
     setShowKindredSpirits,
   } = useContext(KindredButtonContext);
 
-  const simpleHash = new SimpleHashMultichainClient();
+  const alchemyClient = new AlchemyMultichainClient();
 
   useEffect(() => {
-    const networkMapping = simpleHash.getNetworkMapping();
+    const networkMapping = alchemyClient.getNetworkMapping();
     const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
     setNetworks(networks);
   }, []);
@@ -55,7 +55,7 @@ export default function NftTableList() {
     setProgress(0)
     let fetchCount=0
     setIsLoadingModal(true);
-    const uniqueCollections = await simpleHash.getCollectionsForOwner(addressToFetch, filter, (count) => {
+    const uniqueCollections = await alchemyClient.getCollectionsForOwner(addressToFetch, filter, (count) => {
       fetchCount += count
       setProgress(fetchCount)
     })
