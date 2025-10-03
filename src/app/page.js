@@ -1,48 +1,24 @@
 'use client';
-import {
-  EthereumClient,
-  w3mConnectors,
-  w3mProvider,
-} from '@web3modal/ethereum';
-import { Web3Modal } from '@web3modal/react';
-import { configureChains, createConfig, WagmiConfig } from 'wagmi';
-import { goerli, arbitrum, mainnet, polygon, optimism } from 'wagmi/chains';
+import { useState } from 'react';
+import { Web3Provider } from './providers';
 import Hero from './components/Hero';
 import TableList from './components/NftTableList';
 import KindredSpiritsList from './components/KindredSpiritsList';
-import { EnsContext } from './components/context/EnsContext'; // Import the context
-import { useState } from 'react'; // Import the context
+import { EnsContext } from './components/context/EnsContext';
 import { FetchDataProvider } from './components/context/KindredButtonContext';
-import { PatchAxios } from './axios.429.patch'
 
 export default function App() {
-  const chains = [goerli, arbitrum, mainnet, polygon, optimism];
-  const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
   const [ensAddress, setEnsAddress] = useState(null);
 
-  const { publicClient } = configureChains(chains, [
-    w3mProvider({ projectId }),
-  ]);
-  const wagmiConfig = createConfig({
-    autoConnect: true,
-    connectors: w3mConnectors({ projectId, version: 2, chains }),
-    publicClient,
-  });
-  const ethereumClient = new EthereumClient(wagmiConfig, chains);
-  //PatchAxios()
   return (
-    <>
-      <WagmiConfig config={wagmiConfig}>
+    <Web3Provider>
       <EnsContext.Provider value={{ ensAddress, setEnsAddress }}>
         <FetchDataProvider>
-        <Hero />
-        <KindredSpiritsList />
-        <TableList />
+          <Hero />
+          <KindredSpiritsList />
+          <TableList />
         </FetchDataProvider>
-        {/* <MintedNfts /> */}
-        </EnsContext.Provider>
-      </WagmiConfig>
-      <Web3Modal projectId={projectId} ethereumClient={ethereumClient} />
-    </>
+      </EnsContext.Provider>
+    </Web3Provider>
   );
 }

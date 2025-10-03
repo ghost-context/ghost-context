@@ -1,10 +1,10 @@
-import { useState, useEffect, useContext, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useContext, useRef, useLayoutEffect, useMemo } from 'react';
 import NftDescription from './NftDescription';
 import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { SimpleHashMultichainClient } from '../simple-hash';
+import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 import Modal from 'react-modal';
 
@@ -36,6 +36,8 @@ export default function NftTableList() {
   const [networks, setNetworks] = useState([]);
   const [filteredCollections, setFilteredCollections] = useState([]);
   const [isFiltered, setIsFiltered] = useState(false);
+  const [ownerCounts, setOwnerCounts] = useState({});
+  const [sortBy, setSortBy] = useState('relevance'); // 'relevance' | 'newest'
   const {
     setSelectedCollectionsContext,
     setTriggerKindredSpirits,
@@ -43,10 +45,13 @@ export default function NftTableList() {
     setShowKindredSpirits,
   } = useContext(KindredButtonContext);
 
-  const simpleHash = new SimpleHashMultichainClient();
+  const alchemy = new AlchemyMultichainClient();
+  const [latestInboundByContract, setLatestInboundByContract] = useState({});
+  const inboundCacheRef = useRef(new Map()); // session cache: contract -> ISO timestamp
+  const inboundFetchPendingRef = useRef(false);
 
   useEffect(() => {
-    const networkMapping = simpleHash.getNetworkMapping();
+    const networkMapping = alchemy.getNetworkMapping();
     const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
     setNetworks(networks);
   }, []);
@@ -55,7 +60,7 @@ export default function NftTableList() {
     setProgress(0)
     let fetchCount=0
     setIsLoadingModal(true);
-    const uniqueCollections = await simpleHash.getCollectionsForOwner(addressToFetch, filter, (count) => {
+    const uniqueCollections = await alchemy.getCollectionsForOwner(addressToFetch, filter, (count) => {
       fetchCount += count
       setProgress(fetchCount)
     })
@@ -63,6 +68,15 @@ export default function NftTableList() {
     setTotalOwnedCollections(uniqueCollections.length.toLocaleString());
     setTotalCollections(uniqueCollections);
     setCollections(uniqueCollections.slice(0, numCollectionsToShow));
+    if (typeof window !== 'undefined') {
+      window.__collections = uniqueCollections;
+      console.log('loaded collections sample', uniqueCollections.slice(0, 5).map(c => ({
+        name: c.name,
+        contract: c.contract_address,
+        network: c.network,
+        image_small_url: c.image_small_url
+      })));
+    }
     setIsLoadingModal(false);
   };
 
@@ -71,7 +85,7 @@ export default function NftTableList() {
     let newFilteredCollections = totalCollections;
 
     if (networkFilter) {
-      newFilteredCollections = newFilteredCollections.filter((collection) => collection.network === networkFilter);
+      newFilteredCollections = newFilteredCollections.filter((collection) => String(collection.network) === String(networkFilter));
     }
 
     if (searchQuery) {
@@ -92,9 +106,15 @@ export default function NftTableList() {
       setIsFiltered(true);
     } else {
       setIsFiltered(false);
-      setFilteredCollections(collections);  // Reset filteredCollections to the original list
+      setFilteredCollections(collections);  // Reset the filteredCollections to the original list
     }
   }, [networkFilter, searchQuery, collectionFilter, totalCollections, collections]);
+
+  // Keep displayed rows in sync with pagination
+  useEffect(() => {
+    setCollections(totalCollections.slice(0, numCollectionsToShow));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numCollectionsToShow]);
 
   useEffect(() => {
     const addressToFetch = ensAddress || (!ensAddress && address);
@@ -176,7 +196,105 @@ export default function NftTableList() {
     setNetworkFilter(event.target.value);
   };
 
-  const collectionsToDisplay = isFiltered ? filteredCollections : collections;
+  const baseList = isFiltered ? filteredCollections : collections;
+  const collectionsToDisplay = useMemo(() => {
+    if (sortBy !== 'newest') return baseList;
+    const comparator = (a, b) => {
+      const inboundA = latestInboundByContract[a.contract_address];
+      const inboundB = latestInboundByContract[b.contract_address];
+      const atA = inboundA || a.acquired_at_latest || a.acquired_at || a.mint?.timestamp || null;
+      const atB = inboundB || b.acquired_at_latest || b.acquired_at || b.mint?.timestamp || null;
+      const tA = atA ? new Date(atA).getTime() : -Infinity;
+      const tB = atB ? new Date(atB).getTime() : -Infinity;
+      if (tA === tB) {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+      return tB - tA;
+    };
+    const arr = [...baseList].sort(comparator);
+    if (typeof window !== 'undefined') {
+      try {
+        console.log('sort:newest sample', arr.slice(0, 5).map(c => ({
+          name: c.name,
+          contract: c.contract_address,
+          inbound_latest: latestInboundByContract[c.contract_address] || null,
+          acquired_at_latest: c.acquired_at_latest,
+          acquired_at: c.acquired_at
+        })));
+      } catch {}
+    }
+    return arr;
+  }, [baseList, sortBy, latestInboundByContract]);
+
+  // For "Newest" sorting, hydrate visible rows with latest inbound transfer timestamps (wallet-level acquisition)
+  useEffect(() => {
+    const hydrateInbound = async () => {
+      if (sortBy !== 'newest') return;
+      let addressToFetch = ensAddress || (!ensAddress && address);
+      if (!addressToFetch) return;
+      // Resolve ENS name to hex address if needed
+      if (typeof addressToFetch === 'string' && !addressToFetch.startsWith('0x')) {
+        try {
+          const resolved = await alchemy.core.resolveName(addressToFetch);
+          if (resolved) addressToFetch = resolved;
+        } catch {}
+      }
+      const visible = (collectionsToDisplay || []).slice(0, Math.min(numCollectionsToShow, 30));
+      const cache = inboundCacheRef.current;
+      const missing = visible.filter(c => !cache.has(c.contract_address) && latestInboundByContract[c.contract_address] == null && c.network && c.contract_address && c.network !== 'POAP');
+      if (missing.length === 0) return;
+      if (inboundFetchPendingRef.current) return;
+      inboundFetchPendingRef.current = true;
+      // Limit concurrency to avoid 429
+      const BATCH_SIZE = 1;
+      const nextMap = { ...latestInboundByContract };
+      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+        const batch = missing.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map(async (c) => {
+          const ts = await alchemy.getLatestInboundTransferTimestamp(c.network, c.contract_address, addressToFetch).catch(() => null);
+          return [c.contract_address, ts];
+        }));
+        for (const [k, v] of results) {
+          if (v) {
+            nextMap[k] = v; // only cache when we have a value to allow retries
+            cache.set(k, v);
+          }
+        }
+        // small jitter to avoid request bursts
+        await new Promise(r => setTimeout(r, 200));
+      }
+      setLatestInboundByContract({ ...nextMap });
+      inboundFetchPendingRef.current = false;
+    };
+    hydrateInbound();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, collectionsToDisplay, numCollectionsToShow, ensAddress, address]);
+
+  // Enrich visible rows with owner counts lazily using a separate map to avoid re-writing arrays
+  useEffect(() => {
+    const enrich = async () => {
+      const visible = (isFiltered ? filteredCollections : collections).slice(0, numCollectionsToShow);
+      const missing = visible.filter(c => ownerCounts[c.contract_address] == null);
+      if (missing.length === 0) return;
+      const results = await Promise.all(missing.map(async (c) => {
+        const count = await alchemy.getOwnersCountForContract(c.network, c.contract_address, 25000);
+        return [c.contract_address, count];
+      }));
+      setOwnerCounts(prev => {
+        const next = { ...prev };
+        for (const [addr, cnt] of results) {
+          next[addr] = cnt;
+        }
+        return next;
+      });
+    };
+    if ((isFiltered ? filteredCollections : collections).length) {
+      enrich();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collections, filteredCollections, isFiltered, numCollectionsToShow]);
 
   return (
     <div>
@@ -249,6 +367,19 @@ export default function NftTableList() {
                     </select>
                   </div>
                 </div>
+                <div className="mt-2 ml-0 sm:ml-4 flex rounded-md shadow-sm">
+                  <div className="relative flex flex-grow items-stretch focus-within:z-10">
+                    <label
+                      htmlFor="sortBy"
+                      className="absolute -top-2 left-2 inline-block rounded-sm bg-purple-700 px-1 text-xs font-medium text-white"
+                    > Sort by</label>
+                    <select id="sortBy" className="text-gray-900 w-full" value={sortBy} onChange={(e)=>setSortBy(e.target.value)}>
+                      <option value="relevance">Relevance</option>
+                      <option value="newest">Newest acquisition</option>
+                    </select>
+                  </div>
+                </div>
+                
               </div>
             </div>
           </div>
@@ -304,70 +435,64 @@ export default function NftTableList() {
                         <td className='relative px-7 sm:w-12 sm:px-6'>No Results</td>
                       </tr>
                     ) : (
-                      collectionsToDisplay &&
                       collectionsToDisplay.map((collection, i) => {
-                        if (
-                          collection.image_small_url
-                        ) {
-                          return (
-                            <tr key={collection.contract_address + i} className={selectedCollections.includes(collection) ? 'bg-gray-800' : undefined}>
-                              <td className="relative px-7 sm:w-12 sm:px-6">
-                                {selectedCollections.includes(collection) && (
-                                  <div className="absolute inset-y-0 left-0 w-0.5 bg-purple-500" />
-                                )}
-                                <input
-                                  type="checkbox"
-                                  className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                                  value={collection.contract_address}
-                                  checked={selectedCollections.includes(collection)}
-                                  onChange={(e) =>
-                                    setSelectedCollections(
-                                      e.target.checked
-                                        ? [...selectedCollections, collection]
-                                        : selectedCollections.filter((p) => p !== collection)
-                                    )
-                                  }
-                                />
-                              </td>
-                              <td
-                                className={classNames(
-                                  'whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-0',
-                                  selectedCollections.includes(collection) ? 'text-purple-600' : 'text-gray-900'
-                                )}>
-                                <div className='flex items-center'>
-                                  <div className='h-11 w-11 flex-shrink-0'>
-                                    <img
-                                      className='h-11 w-11 rounded-full'
-                                      src={collection.image_small_url}
-                                      alt={collection.name}
-                                    />
-                                  </div>
-                                  <div className='ml-4'>
-                                    <div className='font-medium text-white'>
-                                      {collection.name}
-                                    </div>
+                        const key = `${collection.contract_address || 'unknown'}-${collection.network || 'net'}-${i}`;
+                        const imageSrc = collection.image_small_url || '/ghost.png';
+                        const nameText = collection.name || collection.contract_address || 'Collection';
+                        return (
+                          <tr key={key} className={selectedCollections.includes(collection) ? 'bg-gray-800' : undefined}>
+                            <td className="relative px-7 sm:w-12 sm:px-6">
+                              {selectedCollections.includes(collection) && (
+                                <div className="absolute inset-y-0 left-0 w-0.5 bg-purple-500" />
+                              )}
+                              <input
+                                type="checkbox"
+                                className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                                value={collection.contract_address}
+                                checked={selectedCollections.includes(collection)}
+                                onChange={(e) =>
+                                  setSelectedCollections(
+                                    e.target.checked
+                                      ? [...selectedCollections, collection]
+                                      : selectedCollections.filter((p) => p !== collection)
+                                  )
+                                }
+                              />
+                            </td>
+                            <td
+                              className={classNames(
+                                'whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-0',
+                                selectedCollections.includes(collection) ? 'text-purple-600' : 'text-gray-900'
+                              )}>
+                              <div className='flex items-center'>
+                                <div className='h-11 w-11 flex-shrink-0'>
+                                  <img
+                                    className='h-11 w-11 rounded-full'
+                                    src={imageSrc}
+                                    alt={nameText}
+                                    onError={(e) => { e.currentTarget.src = '/ghost.png'; }}
+                                  />
+                                </div>
+                                <div className='ml-4'>
+                                  <div className='font-medium text-white'>
+                                    {nameText}
                                   </div>
                                 </div>
-                              </td>
-                              <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                <div className='text-white'>{collection.networkName}</div>
-                              </td>
-                              <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
-                                <div className='text-white'>{collection.distinct_owner_count}</div>
-                              </td>
-                              <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
-                                <NftDescription nft={collection} />
-                              </td>
-                            </tr>
-                          );
-                        } else {
-                          return (
-                            <>
-
-                            </>
-                          )
-                        }
-                      }))}
+                              </div>
+                            </td>
+                            <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
+                              <div className='text-white'>{collection.networkName}</div>
+                            </td>
+                            <td className='whitespace-nowrap px-3 py-5 text-sm text-gray-500'>
+                              <div className='text-white'>{ownerCounts[collection.contract_address] ?? collection.distinct_owner_count ?? ''}</div>
+                            </td>
+                            <td className='whitespace-nowrap max-w-xs px-3 py-5 text-sm text-gray-500'>
+                              <NftDescription nft={collection} />
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
                 <div className='flex mt-4 sm:ml-16 sm:mt-0 sm:flex-none items-center max-sm:justify-start md:justify-center'>

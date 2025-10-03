@@ -6,7 +6,7 @@ export const FetchDataProvider = ({ children }) => {
   const [selectedCollectionsContext, setSelectedCollectionsContext] = useState([]);
   const [triggerKindredSpirits, setTriggerKindredSpirits] = useState(false);
   const [ownedCollections, setOwnedCollections] = useState([]);
-  const [showKindredSpirits, setShowKindredSpirits] = useState(true);
+  const [showKindredSpirits, setShowKindredSpirits] = useState(false);
 
 
   return (

@@ -9,13 +9,15 @@ export const SocialCard = ({ airstack, count, address , inModal }) => {
     useEffect(() => {
       const fetchSocials = async () => {
         const result = await airstack.socialLookup(address);
-        setSocials(result);
-        const profileImage = Array.isArray(result) && result.find(social => social.profileImage.startsWith('https'))?.profileImage;
-        if (profileImage) {
-          setImage(profileImage);
+        const farcasterOnly = Array.isArray(result) ? result.filter(s => s.dappName === 'farcaster') : [];
+        if (typeof window !== 'undefined') {
+          console.log('Farcaster profiles found', { address, count: farcasterOnly.length });
         }
+        setSocials(farcasterOnly);
+        const profileImage = farcasterOnly.find(social => (social.profileImage || '').startsWith('http'))?.profileImage;
+        if (profileImage) setImage(profileImage);
       };
-  
+
       fetchSocials();
     }, [address]);
     return (
@@ -34,7 +36,7 @@ export const SocialCard = ({ airstack, count, address , inModal }) => {
           <div key={index} className="flex items-center mr-2">
             <a href={social.link} target="_blank" rel="noopener noreferrer">
                 <img 
-                    src={`/networks/${social.dappName}.svg`} 
+                    src={`/networks/farcaster.svg`} 
                     alt={social.dappName} 
                     title={social.profileName} 
                     className="h-4 w-4 mr-2" 

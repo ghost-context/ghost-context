@@ -1,5 +1,3 @@
-import { ChevronRightIcon } from '@heroicons/react/20/solid';
-import { Web3Button } from '@web3modal/react';
 import EnsInput from './EnsInput';
 
 export default function Hero() {
@@ -48,20 +46,10 @@ export default function Hero() {
       </div>
       <div className='mx-auto max-w-7xl px-6 pb-12 pt-10 sm:pb-32 lg:flex lg:px-8 lg:py-12'>
         <div className='mx-auto max-w-2xl flex-shrink-0 lg:mx-0 lg:max-w-xl lg:pt-8'>
-          <img className='h-11' src='/ghost-emoji.svg' alt='Your Company' />
           <div className='mt-24 sm:mt-32 lg:mt-16'>
-            <p className='inline-flex space-x-6'>
-              <span className='rounded-full bg-indigo-500/10 px-3 py-1 text-sm font-semibold leading-6 text-indigo-400 ring-1 ring-inset ring-indigo-500/20'>
-                Ghost Context
-              </span>
-              <span className='inline-flex items-center space-x-2 text-sm font-medium leading-6 text-gray-300'>
-                <span>Connect your wallet</span>
-                <ChevronRightIcon
-                  className='h-5 w-5 text-gray-500'
-                  aria-hidden='true'
-                />
-              </span>
-            </p>
+            <span className='rounded-full bg-indigo-500/10 px-3 py-1 text-sm font-semibold leading-6 text-indigo-400 ring-1 ring-inset ring-indigo-500/20'>
+              Ghost Context
+            </span>
           </div>
           <h1 className='mt-10 text-4xl font-bold tracking-tight text-white sm:text-6xl'>
             From Collections to Connections
@@ -70,14 +58,7 @@ export default function Hero() {
           Summon a list of kindred spirits based on NFTs held in common✨👻✨
           </p>
           <div className='mt-10 flex items-center gap-x-6'>
-            <Web3Button />
-            {/* {isConnecting ? (
-              <p className='text-white'>Connecting...</p>
-            ) : isDisconnected ? (
-              <p className='text-white'>Connect</p>
-            ) : (
-              <p className='text-white'>{address}</p>
-            )} */}
+            <w3m-button />
           </div>
           <EnsInput />
         </div>

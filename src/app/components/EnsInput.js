@@ -1,4 +1,5 @@
   import { useEnsAddress, useEnsName } from 'wagmi';
+  import { isAddress } from 'viem';
   import { useState, useContext, useEffect } from 'react';
   import { EnsContext } from './context/EnsContext'; 
   import { KindredButtonContext } from './context/KindredButtonContext';
@@ -11,13 +12,18 @@
       setShowKindredSpirits
     } = useContext(KindredButtonContext);
     
+    const isPotentialEns = ensNameOrAddress?.endsWith?.('.eth') && ensNameOrAddress.length > 3;
+    const isHexAddress = isAddress(ensNameOrAddress || '');
+
     const { data, isError, isLoading } = useEnsAddress({
-      name: ensNameOrAddress,
+      name: isPotentialEns ? ensNameOrAddress : undefined,
       chainId: 1,
+      enabled: Boolean(isPotentialEns),
     });
     const { data: dataAddress, isError: addressError, isLoading: isLoadingAddress } = useEnsName({
-      address: ensNameOrAddress,
+      address: isHexAddress ? ensNameOrAddress : undefined,
       chainId: 1,
+      enabled: Boolean(isHexAddress),
     });
     const { setEnsAddress } = useContext(EnsContext); // Consume the context
     useEffect(() => {
@@ -49,7 +55,7 @@
               htmlFor='ens'
               className='block text-sm font-medium leading-6 text-white px-5 py-3'
             >
-              or with Ens
+              or enter ENS or wallet address
             </label>
             <input
               type='text'
