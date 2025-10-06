@@ -2,6 +2,9 @@
   "name": "ghost-context-2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.x"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:open": "npm run dev & sleep 3 && open -na 'Google Chrome' --args --auto-open-devtools-for-tabs http://localhost:3000",
