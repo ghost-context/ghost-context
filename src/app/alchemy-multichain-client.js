@@ -299,6 +299,7 @@ AlchemyMultichainClient.prototype.getCollectionsForOwner = async function getCol
                         image_small_url: imageUrl,
                         distinct_owner_count: 0,
                         contract_address: contract,
+                        token_type: metadata?.tokenType || 'UNKNOWN', // ERC721, ERC1155, or UNKNOWN
                         large_collection: false,
                         acquired_at: acquiredAt,
                         acquired_at_latest: acquiredAtLatest

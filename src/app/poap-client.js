@@ -34,6 +34,18 @@ export class PoapClient {
     }
     return res.json();
   }
+
+  async getEventDetails(eventId) {
+    const url = new URL('/api/poap/event/details', typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
+    url.searchParams.set('id', String(eventId));
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (!res.ok) {
+      let body = '';
+      try { body = await res.text(); } catch {}
+      throw new Error(`POAP event details failed: ${res.status} ${body}`);
+    }
+    return res.json();
+  }
 }
 
 
