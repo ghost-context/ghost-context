@@ -2,6 +2,10 @@
 import { MoralisConfig } from '../../moralis-config.js';
 
 export async function GET(request) {
+  console.log('\n\n========================================');
+  console.log('🚀 NEW REQUEST: get-filtered-tokens API');
+  console.log('========================================\n');
+  
   try {
     const { searchParams } = new URL(request.url);
     const address = (searchParams.get('address') || '').trim().toLowerCase();
@@ -22,9 +26,12 @@ export async function GET(request) {
     }
 
     const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
-    const chains = ['0x2105', '8453', 'base'];
+    const chains = ['base', '0x2105']; // Try Base network formats (name first, then hex)
     const minHolders = 2;
     const maxHolders = 10000;
+
+    console.log(`\n🔍 Fetching ERC-20 tokens for wallet: ${address}`);
+    console.log(`   Filter: ${minHolders}-${maxHolders} holders on Base Mainnet\n`);
 
     // Step 1: Get wallet's ERC-20 tokens
     let tokensData = null;
@@ -32,6 +39,9 @@ export async function GET(request) {
 
     for (const chainFormat of chains) {
       const tokensUrl = `${baseUrl}/${address}/erc20?chain=${chainFormat}`;
+      
+      console.log(`   Trying chain: ${chainFormat}`);
+      console.log(`   URL: ${tokensUrl.replace(apiKey, 'API_KEY')}`);
       
       const tokensResponse = await fetch(tokensUrl, {
         headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
@@ -43,8 +53,14 @@ export async function GET(request) {
         if (data && (data.result?.length > 0 || (Array.isArray(data) && data.length > 0))) {
           tokensData = data;
           chain = chainFormat;
+          const tokenCount = Array.isArray(data) ? data.length : (data.result?.length || 0);
+          console.log(`   ✅ Found ${tokenCount} tokens on ${chainFormat} for ${address}\n`);
           break;
+        } else {
+          console.log(`   ❌ No tokens found on ${chainFormat}`);
         }
+      } else {
+        console.log(`   ⚠️ Request failed: ${tokensResponse.status}`);
       }
     }
 
@@ -62,12 +78,18 @@ export async function GET(request) {
     // Handle both response formats: direct array or {result: [...]}
     const allTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
 
-    // Step 2: Filter tokens by holder count (with batch processing)
+    // Log configuration on first use
+    MoralisConfig.logConfig();
+
+    console.log(`\n📋 Checking ${allTokens.length} ERC-20 tokens (filter: ${minHolders}-${maxHolders} holders):\n`);
+
+    // Step 2: Filter tokens by holder count (sequential processing for reliability)
     const filteredTokens = [];
-    const BATCH_SIZE = 5; // Process 5 tokens simultaneously
     
-    // Helper function to check a single token
-    const checkToken = async (token) => {
+    // Process tokens one at a time (more reliable, respects rate limits)
+    for (let i = 0; i < allTokens.length; i++) {
+      const token = allTokens[i];
+      
       try {
         const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
         const holdersResponse = await fetch(holdersUrl, {
@@ -78,8 +100,13 @@ export async function GET(request) {
           const holdersData = await holdersResponse.json();
           const holderCount = holdersData.totalHolders || 0;
 
-          if (holderCount >= minHolders && holderCount <= maxHolders) {
-            return {
+          const passed = holderCount >= minHolders && holderCount <= maxHolders;
+          const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+          
+          console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+
+          if (passed) {
+            filteredTokens.push({
               address: token.token_address,
               symbol: token.symbol || 'UNKNOWN',
               name: token.name || 'Unknown Token',
@@ -87,28 +114,16 @@ export async function GET(request) {
               balance: token.balance_formatted || '0',
               logo: token.logo || token.thumbnail || null,
               usdValue: token.usd_value || null
-            };
+            });
           }
         }
       } catch (err) {
-        // Silently skip failed tokens
+        console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
       }
-      return null;
-    };
-
-    // Process tokens in batches
-    for (let i = 0; i < allTokens.length; i += BATCH_SIZE) {
-      const batch = allTokens.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(batch.map(checkToken));
       
-      // Add non-null results
-      results.forEach(result => {
-        if (result) filteredTokens.push(result);
-      });
-      
-      // Small delay between batches
-      if (i + BATCH_SIZE < allTokens.length) {
-        await new Promise(resolve => setTimeout(resolve, MoralisConfig.delayMs));
+      // Delay between each token request (avoid rate limiting)
+      if (i < allTokens.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     }
 
@@ -119,12 +134,31 @@ export async function GET(request) {
     const timeEstimate = MoralisConfig.estimateTime(filteredTokens.length, avgHolders);
     const costEstimate = MoralisConfig.estimateCost(filteredTokens.length, avgHolders);
 
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed filter (${minHolders}-${maxHolders} holders)`);
+    console.log(`   📊 ${filteredTokens.length} passed / ${allTokens.length - filteredTokens.length} filtered out`);
+    
+    if (filteredTokens.length > 0) {
+      console.log(`\n   ✅ Tokens that PASSED filter:`);
+      filteredTokens.slice(0, 10).forEach(token => {
+        console.log(`      • ${token.symbol}: ${token.holderCount.toLocaleString()} holders`);
+      });
+      if (filteredTokens.length > 10) {
+        console.log(`      ... and ${filteredTokens.length - 10} more`);
+      }
+    } else {
+      console.log(`\n   ⚠️  NO TOKENS passed the ${minHolders}-${maxHolders} holder filter`);
+      console.log(`   💡 This wallet may only hold very popular tokens (>10k holders) or spam tokens`);
+    }
+    
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+
     return new Response(
       JSON.stringify({
         sourceWallet: address,
         chain,
         totalTokens: allTokens.length,
-        filteredTokens: filteredTokens.sort((a, b) => b.holderCount - a.holderCount), // Sort by holder count
+        filteredTokens: filteredTokens.sort((a, b) => b.holderCount - a.holderCount), // Sort by holder count (descending)
         criteria: { minHolders, maxHolders },
         estimates: {
           plan: MoralisConfig.plan,

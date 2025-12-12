@@ -32,7 +32,7 @@ const config = PLAN_CONFIGS[PLAN] || PLAN_CONFIGS.free;
 
 export const MoralisConfig = {
   plan: PLAN,
-  pageSize: config.pageSize,
+  pageSize: Math.min(config.pageSize, 100), // Safety cap: never exceed 100 for API compatibility
   delayMs: config.delayMs,
   throughput: config.throughput,
   limit: config.dailyLimit || config.monthlyLimit,

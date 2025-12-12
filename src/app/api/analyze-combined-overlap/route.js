@@ -167,54 +167,97 @@ export async function POST(request) {
     // 3. ANALYZE ERC-20 TOKENS (Moralis)
     // ========================================
     if (selectedERC20s.length > 0) {
+      console.log(`\n🪙 Analyzing ${selectedERC20s.length} ERC-20 tokens for kindred spirits:`);
+      console.log(`   Tokens:`, selectedERC20s.map(t => `${t.symbol} (${t.address.slice(0,8)}...)`).join(', '));
+      
+      // Log Moralis configuration
+      console.log(`   📋 Moralis Config: Plan=${MoralisConfig.plan}, PageSize=${MoralisConfig.pageSize}, Delay=${MoralisConfig.delayMs}ms`);
+      
       const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+      if (!apiKey) {
+        console.log(`   ❌ ERROR: No Moralis API key found!`);
+      }
       if (apiKey) {
         const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
-        const chain = '0x2105'; // Base network
+        const chains = ['base', '0x2105']; // Try Base network formats (name first, then hex)
 
         for (const token of selectedERC20s) {
-          try {
-            let cursor = null;
-            let allOwners = [];
-            let pageCount = 0;
+          console.log(`\n   📊 Fetching holders for ${token.symbol}...`);
+          
+          let allOwners = [];
+          let successfulChain = null;
+          
+          // Try each chain format until one works
+          for (const chain of chains) {
+            try {
+              console.log(`      🔍 Trying chain format: ${chain} with limit=${MoralisConfig.pageSize}`);
+              let cursor = null;
+              let pageCount = 0;
+              let chainOwners = [];
 
-            do {
-              const params = new URLSearchParams({
-                chain,
-                limit: String(MoralisConfig.pageSize)
-              });
-              if (cursor) params.set('cursor', cursor);
+              do {
+                const params = new URLSearchParams({
+                  chain: chain,
+                  limit: String(MoralisConfig.pageSize)
+                });
+                if (cursor) params.set('cursor', cursor);
 
-              const response = await fetch(
-                `${baseUrl}/erc20/${token.address}/owners?${params}`,
-                {
-                  headers: {
-                    'accept': 'application/json',
-                    'X-API-Key': apiKey
+                const response = await fetch(
+                  `${baseUrl}/erc20/${token.address}/owners?${params}`,
+                  {
+                    headers: {
+                      'accept': 'application/json',
+                      'X-API-Key': apiKey
+                    }
                   }
+                );
+
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  console.log(`      ⚠️  Chain ${chain} failed (${response.status}): ${errorText.substring(0, 100)}`);
+                  break;
                 }
-              );
 
-              if (!response.ok) {
+                const data = await response.json();
+                const owners = data.result || [];
+                
+                // If we get data, this chain format works
+                if (pageCount === 0 && owners.length > 0) {
+                  console.log(`      ✅ Chain format ${chain} works!`);
+                  successfulChain = chain;
+                }
+                
+                console.log(`      📄 Page ${pageCount + 1}: ${owners.length} owners fetched`);
+                chainOwners = chainOwners.concat(owners);
+                pageCount++;
+
+                cursor = data.cursor || null;
+
+                if (chainOwners.length > 150000) {
+                  console.log(`      ⚠️  Reached 150k owner limit, stopping pagination`);
+                  break;
+                }
+
+                if (cursor) {
+                  await new Promise(resolve => setTimeout(resolve, MoralisConfig.delayMs));
+                }
+              } while (cursor);
+
+              // If we got owners, use this chain and stop trying others
+              if (chainOwners.length > 0) {
+                allOwners = chainOwners;
                 break;
               }
+            } catch (err) {
+              console.log(`      ⚠️  Chain ${chain} error: ${err.message}`);
+            }
+          }
 
-              const data = await response.json();
-              const owners = data.result || [];
-              allOwners = allOwners.concat(owners);
-              pageCount++;
-
-              cursor = data.cursor || null;
-
-              if (allOwners.length > 150000) {
-                break;
-              }
-
-              if (cursor) {
-                await new Promise(resolve => setTimeout(resolve, MoralisConfig.delayMs));
-              }
-            } while (cursor);
-
+          if (allOwners.length === 0) {
+            console.log(`      ❌ No holders found for ${token.symbol} on any chain format`);
+          } else {
+            console.log(`      ✅ Found ${allOwners.length} holders for ${token.symbol} (chain: ${successfulChain})`);
+            
             for (const owner of allOwners) {
               addOverlap(owner.owner_address.toLowerCase(), {
                 address: token.address,
@@ -224,8 +267,6 @@ export async function POST(request) {
                 type: 'ERC-20'
               }, 'erc20');
             }
-          } catch (err) {
-            // Silently skip failed tokens
           }
 
           await new Promise(resolve => setTimeout(resolve, 200)); // Delay between tokens
@@ -237,8 +278,13 @@ export async function POST(request) {
     // 4. COMPILE RESULTS
     // ========================================
     
+    console.log(`\n📊 Analysis Complete:`);
+    console.log(`   Total wallets with ANY overlap: ${overlapMap.size}`);
+    console.log(`   Source wallet: ${address}`);
+    
     // Determine minimum overlap threshold
     const minOverlap = totalAssets >= 2 ? 2 : 1;
+    console.log(`   Minimum overlap threshold: ${minOverlap} assets`);
 
     const kindredSpirits = Array.from(overlapMap.entries())
       .filter(([wallet, data]) => data.count >= minOverlap) // Must have at least minOverlap shared assets
@@ -255,6 +301,9 @@ export async function POST(request) {
       }))
       .sort((a, b) => b.overlapCount - a.overlapCount)
       .slice(0, 100); // Top 100 after filtering
+
+    console.log(`   Kindred spirits found (>= ${minOverlap} overlaps): ${kindredSpirits.length}`);
+    console.log(`   Filtered out (< ${minOverlap} overlaps): ${overlapMap.size - kindredSpirits.length}\n`);
 
     return new Response(
       JSON.stringify({

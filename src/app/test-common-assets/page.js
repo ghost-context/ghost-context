@@ -120,6 +120,9 @@ export default function TestCommonAssetsPage() {
   // Common assets results
   const [commonAssets, setCommonAssets] = useState(null);
   
+  // Shared assets modal
+  const [viewingSpiritAssets, setViewingSpiritAssets] = useState(null);
+  
   // Selected common assets (for recursive kindred spirit analysis)
   const [selectedCommonNFTs, setSelectedCommonNFTs] = useState(new Set());
   const [selectedCommonPOAPs, setSelectedCommonPOAPs] = useState(new Set());
@@ -158,6 +161,18 @@ export default function TestCommonAssetsPage() {
       if (interval) clearInterval(interval);
     };
   }, [progress.isProcessing]);
+
+  // Keyboard support for modal (Escape to close)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && viewingSpiritAssets) {
+        setViewingSpiritAssets(null);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewingSpiritAssets]);
 
   // Resolve ENS name to address
   const resolveENSToAddress = async (input) => {
@@ -1416,50 +1431,224 @@ export default function TestCommonAssetsPage() {
                       <th className="px-6 py-3 text-left">Wallet / ENS / Farcaster</th>
                       <th className="px-6 py-3 text-right">Overlaps</th>
                       <th className="px-6 py-3 text-right">%</th>
+                      <th className="px-6 py-3 text-left">Shared Assets</th>
                       <th className="px-6 py-3 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {kindredSpirits.map((spirit, idx) => (
-                      <tr 
-                        key={spirit.address} 
-                        className={`border-b border-gray-700 hover:bg-gray-700/50 cursor-pointer ${
-                          selectedSpirits.has(spirit.address) ? 'bg-purple-900/20' : ''
-                        }`}
-                        onClick={() => toggleSpirit(spirit.address)}
-                      >
-                        <td className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedSpirits.has(spirit.address)}
-                            readOnly
-                            className="w-4 h-4"
-                          />
-                        </td>
-                        <td className="px-6 py-4 font-bold text-purple-400">#{idx + 1}</td>
-                        <td className="px-6 py-4">
-                          <TestSocialCard 
-                            address={spirit.address} 
-                            count={spirit.overlapCount}
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-right font-bold">{spirit.overlapCount}</td>
-                        <td className="px-6 py-4 text-right text-green-400">{spirit.overlapPercentage}%</td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={(e) => analyzeKindredSpirit(spirit.address, e)}
-                              className="text-purple-400 hover:text-purple-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-colors text-sm"
-                              title="Analyze this wallet's assets"
-                            >
-                              🔄 Analyze
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {kindredSpirits.map((spirit, idx) => {
+                      const sharedNFTs = spirit.sharedAssets?.nfts || [];
+                      const sharedPOAPs = spirit.sharedAssets?.poaps || [];
+                      const sharedERC20s = spirit.sharedAssets?.erc20s || [];
+                      const totalShared = sharedNFTs.length + sharedPOAPs.length + sharedERC20s.length;
+                      
+                      return (
+                        <tr 
+                          key={spirit.address} 
+                          className={`border-b border-gray-700 hover:bg-gray-700/50 cursor-pointer ${
+                            selectedSpirits.has(spirit.address) ? 'bg-purple-900/20' : ''
+                          }`}
+                          onClick={() => toggleSpirit(spirit.address)}
+                        >
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedSpirits.has(spirit.address)}
+                              readOnly
+                              className="w-4 h-4"
+                            />
+                          </td>
+                          <td className="px-6 py-4 font-bold text-purple-400">#{idx + 1}</td>
+                          <td className="px-6 py-4">
+                            <TestSocialCard 
+                              address={spirit.address} 
+                              count={spirit.overlapCount}
+                            />
+                          </td>
+                          <td className="px-6 py-4 text-right font-bold">{spirit.overlapCount}</td>
+                          <td className="px-6 py-4 text-right text-green-400">{spirit.overlapPercentage}%</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1">
+                              {/* Show breakdown by type */}
+                              <div className="flex flex-wrap gap-1 text-xs">
+                                {sharedNFTs.length > 0 && (
+                                  <span className="px-2 py-0.5 bg-blue-900/40 text-blue-300 rounded">
+                                    🖼️ {sharedNFTs.length} NFT{sharedNFTs.length !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {sharedPOAPs.length > 0 && (
+                                  <span className="px-2 py-0.5 bg-purple-900/40 text-purple-300 rounded">
+                                    🎫 {sharedPOAPs.length} POAP{sharedPOAPs.length !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {sharedERC20s.length > 0 && (
+                                  <span className="px-2 py-0.5 bg-green-900/40 text-green-300 rounded">
+                                    🪙 {sharedERC20s.length} Token{sharedERC20s.length !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Show first few asset names */}
+                              <div className="flex flex-wrap gap-1 items-center">
+                                {[...sharedNFTs.slice(0, 2), ...sharedPOAPs.slice(0, 2), ...sharedERC20s.slice(0, 2)].slice(0, 2).map((asset, i) => (
+                                  <span key={i} className="px-2 py-0.5 bg-gray-900 rounded text-xs text-gray-300" title={asset.name}>
+                                    {asset.symbol || asset.name?.slice(0, 12) || 'Unknown'}
+                                  </span>
+                                ))}
+                                {totalShared > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewingSpiritAssets(spirit);
+                                    }}
+                                    className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs transition-colors"
+                                  >
+                                    View All ({totalShared})
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              <button
+                                onClick={(e) => analyzeKindredSpirit(spirit.address, e)}
+                                className="text-purple-400 hover:text-purple-300 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-colors text-sm"
+                                title="Analyze this wallet's assets"
+                              >
+                                🔄 Analyze
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Shared Assets Modal */}
+        {viewingSpiritAssets && (
+          <div 
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-8"
+            onClick={() => setViewingSpiritAssets(null)}
+          >
+            <div 
+              className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-bold">Shared Assets</h3>
+                  <div className="text-sm text-gray-400 mt-1">
+                    <SimpleAddress address={viewingSpiritAssets.address} />
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingSpiritAssets(null)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6">
+                {/* Summary */}
+                <div className="bg-gray-900 rounded-lg p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-400">Total Shared Assets</div>
+                    <div className="text-3xl font-bold text-purple-400">
+                      {viewingSpiritAssets.overlapCount}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-400">Overlap Percentage</div>
+                    <div className="text-3xl font-bold text-green-400">
+                      {viewingSpiritAssets.overlapPercentage}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* ERC-20 Tokens */}
+                {viewingSpiritAssets.sharedAssets?.erc20s?.length > 0 && (
+                  <div>
+                    <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                      🪙 ERC-20 Tokens ({viewingSpiritAssets.sharedAssets.erc20s.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {viewingSpiritAssets.sharedAssets.erc20s.map((token, idx) => (
+                        <div key={idx} className="bg-gray-900 rounded-lg p-3 flex items-center gap-3">
+                          {token.logo && (
+                            <img src={token.logo} alt={token.symbol} className="w-8 h-8 rounded-full" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{token.symbol || 'Unknown'}</div>
+                            <div className="text-xs text-gray-400">{token.name || 'Unknown Token'}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* NFT Collections */}
+                {viewingSpiritAssets.sharedAssets?.nfts?.length > 0 && (
+                  <div>
+                    <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                      🖼️ NFT Collections ({viewingSpiritAssets.sharedAssets.nfts.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {viewingSpiritAssets.sharedAssets.nfts.map((nft, idx) => (
+                        <div key={idx} className="bg-gray-900 rounded-lg p-3 flex items-center gap-3">
+                          {nft.image && (
+                            <img src={nft.image} alt={nft.name} className="w-8 h-8 rounded" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{nft.name || 'Unknown Collection'}</div>
+                            <div className="text-xs text-gray-400">
+                              {nft.network?.replace('_MAINNET', '').replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* POAP Events */}
+                {viewingSpiritAssets.sharedAssets?.poaps?.length > 0 && (
+                  <div>
+                    <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                      🎫 POAP Events ({viewingSpiritAssets.sharedAssets.poaps.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {viewingSpiritAssets.sharedAssets.poaps.map((poap, idx) => (
+                        <div key={idx} className="bg-gray-900 rounded-lg p-3 flex items-center gap-3">
+                          {poap.image && (
+                            <img src={poap.image} alt={poap.name} className="w-8 h-8 rounded-full" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{poap.name || 'Unknown Event'}</div>
+                            <div className="text-xs text-gray-400">Event #{poap.eventId}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No Assets Message */}
+                {(!viewingSpiritAssets.sharedAssets?.nfts?.length && 
+                  !viewingSpiritAssets.sharedAssets?.poaps?.length && 
+                  !viewingSpiritAssets.sharedAssets?.erc20s?.length) && (
+                  <div className="text-center py-8 text-gray-400">
+                    No shared assets data available
+                  </div>
+                )}
               </div>
             </div>
           </div>
