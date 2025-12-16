@@ -31,6 +31,23 @@ pipelines:
               - export APP_NAME=ghost-context
               - export APP_CODE_PATH=${BITBUCKET_CLONE_DIR}
 
+              - export MORALIS_PLAN=starter
+              - export MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
+              - export POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
+
+              - export NEXT_PUBLIC_MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
+              - export NEXT_PUBLIC_ETH_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_MATIC_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_ARB_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_OPT_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_BASE_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_ZORA_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+              - export NEXT_PUBLIC_POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
+              - export NEXT_PUBLIC_NEYNAR_API_KEY=D716CE14-D8B7-4856-B032-7CDDD2BE8FFD
+              - export NEXT_PUBLIC_PROJECT_ID=02718aeae375ec43c1b2dd06e21e7efb
+
+              - export TF_VAR_app_env_vars="{\"MORALIS_API_KEY\":\"${MORALIS_API_KEY}\",\"POAP_API_KEY\":\"${POAP_API_KEY}\"}"
+
               # Clone devops repository
               - git clone git@bitbucket.org:sloanahrens/devops-cloud-run.git devops-cloud-run
               - cd devops-cloud-run/devops-cloud-run
@@ -52,7 +69,7 @@ pipelines:
 
               # Build and push application container to Artifact Registry
               - echo "Building and pushing application container..."
-              - export DOCKER_BUILD_ARGS="--build-arg NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} --build-arg RESEND_API_KEY=${RESEND_API_KEY} --build-arg CONTACT_EMAIL=${CONTACT_EMAIL} --build-arg RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS} --build-arg RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS}"
+              - export DOCKER_BUILD_ARGS="--build-arg NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID} --build-arg NEXT_PUBLIC_ETH_MAIN_API_KEY=${NEXT_PUBLIC_ETH_MAIN_API_KEY} --build-arg NEXT_PUBLIC_MATIC_MAIN_API_KEY=${NEXT_PUBLIC_MATIC_MAIN_API_KEY} --build-arg NEXT_PUBLIC_ARB_MAIN_API_KEY=${NEXT_PUBLIC_ARB_MAIN_API_KEY} --build-arg NEXT_PUBLIC_OPT_MAIN_API_KEY=${NEXT_PUBLIC_OPT_MAIN_API_KEY} --build-arg NEXT_PUBLIC_BASE_MAIN_API_KEY=${NEXT_PUBLIC_BASE_MAIN_API_KEY} --build-arg NEXT_PUBLIC_NEYNAR_API_KEY=${NEXT_PUBLIC_NEYNAR_API_KEY} --build-arg NEXT_PUBLIC_AIRSTACK_KEY=${NEXT_PUBLIC_AIRSTACK_KEY}"
               - cd cloud-run
               - ./cloud-run.sh build-push-app-image ${NORMALIZED_TAG}
 
