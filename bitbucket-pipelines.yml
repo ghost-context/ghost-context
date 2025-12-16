@@ -1,0 +1,204 @@
+image: atlassian/default-image:4
+
+definitions:
+  caches:
+    docker-buildx: ~/.docker/buildx
+    nextjs: nextapp/.next/cache
+
+pipelines:
+  default:
+    - parallel:
+        - step:
+            name: Build and Test Next.js App
+            image: node:20-alpine
+            caches:
+              - node
+              - nextjs
+            script:
+              - cd nextapp
+              - npm ci
+              - npm run build
+              - npm run lint
+              - npm run type-check
+              - npm test
+
+        - step:
+            name: Deploy to Cloud Run
+            services:
+              - docker
+            script:
+              # Set required environment variables
+              - export APP_NAME=ghost-context
+              - export APP_CODE_PATH=${BITBUCKET_CLONE_DIR}
+
+              # Clone devops repository
+              - git clone git@bitbucket.org:sloanahrens/devops-cloud-run.git devops-cloud-run
+              - cd devops-cloud-run/devops-cloud-run
+
+              # Build devops container (required for deployment)
+              - echo "Building DevOps container for deployment..."
+              - cd docker
+              - ./pull-devops-image.sh master
+
+              # Validate bootstrap infrastructure is ready
+              - echo "Validating bootstrap infrastructure..."
+              - cd ../bootstrap
+              - ./validate-bootstrap.sh
+              - cd ..
+
+              # Normalize branch name for image tag
+              - export NORMALIZED_TAG=$(scripts/normalize-branch-tag.sh ${BITBUCKET_BRANCH})
+              - echo "NORMALIZED_TAG is ${NORMALIZED_TAG}"
+
+              # Build and push application container to Artifact Registry
+              - echo "Building and pushing application container..."
+              - export DOCKER_BUILD_ARGS="--build-arg NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} --build-arg RESEND_API_KEY=${RESEND_API_KEY} --build-arg CONTACT_EMAIL=${CONTACT_EMAIL} --build-arg RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS} --build-arg RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS}"
+              - cd cloud-run
+              - ./cloud-run.sh build-push-app-image ${NORMALIZED_TAG}
+
+              # Deploy application with normalized tag
+              - echo "Deploying application to Cloud Run with ${APP_NAME} and ${NORMALIZED_TAG}..."
+              - ./cloud-run.sh apply ${NORMALIZED_TAG}
+
+              # Test that the deployment is working
+              - echo "Testing deployment health..."
+              - |
+                export SERVICE_URL=$(docker run --rm \
+                    -v $(pwd):/workspace \
+                    -w /workspace \
+                    -e GCP_SERVICE_ACCOUNT_KEY="$GCP_SERVICE_ACCOUNT_KEY" \
+                    devops:latest \
+                    terraform output -raw service_url 2>/dev/null | tail -n1)
+                echo "Service URL: $SERVICE_URL"
+
+                # Test with retries (up to 30 seconds)
+                for i in {1..6}; do
+                  echo "Attempt $i: Testing $SERVICE_URL..."
+                  if docker run --rm -e GCP_SERVICE_ACCOUNT_KEY devops:latest curl -f -s -o /dev/null -w "%{http_code}\n" "$SERVICE_URL" | grep -q "200"; then
+                    echo "✅ Health check passed! Service is running."
+                    exit 0
+                  fi
+                  echo "Waiting 5 seconds before retry..."
+                  sleep 5
+                done
+                echo "❌ Health check failed after 30 seconds"
+                exit 1
+
+              # Display Service URL
+              - echo "Service URL is $SERVICE_URL"
+
+  # Custom pipelines
+  custom:
+    # Branch cleanup pipeline - triggered by webhook on PR merge (when "Close source branch" checked)
+    branch-cleanup:
+      - step:
+          name: Destroy Branch Resources on Branch Deletion
+          services:
+            - docker
+          script:
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # BRANCH DELETION CLEANUP PIPELINE
+            # ═══════════════════════════════════════════════════════════════════════════════
+            #
+            # AUTOMATIC TRIGGER: When PR merged with "Close source branch" checked
+            # MANUAL TRIGGER: Can also be run manually after deleting a branch
+            #
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # HOW IT WORKS (AUTOMATIC):
+            # ═══════════════════════════════════════════════════════════════════════════════
+            #
+            # When you merge a PR with "Close source branch" ✓:
+            #   1. Bitbucket merges PR and deletes the source branch
+            #   2. Webhook fires "pullrequest:fulfilled" event
+            #   3. triggerBranchCleanup Firebase function receives it
+            #   4. Function triggers this pipeline for the deleted branch
+            #   5. Pipeline destroys Cloud Run resources automatically
+            #
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # HOW TO USE (MANUAL TRIGGER):
+            # ═══════════════════════════════════════════════════════════════════════════════
+            #
+            # If you deleted a branch manually (not via PR merge):
+            #
+            # 1. Go to: Bitbucket → Pipelines → Run pipeline
+            #
+            # 2. Pipeline: Select "Custom: branch-cleanup"
+            #
+            # 3. Branch: Select the deleted branch from dropdown
+            #    (or select "Custom" and manually type the branch name)
+            #
+            # 4. Click "Run"
+            #
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # WHAT GETS DESTROYED:
+            # ═══════════════════════════════════════════════════════════════════════════════
+            #
+            # When you run cleanup for branch "feature/new-api":
+            #   ✅ Terraform workspace: "feature-new-api" (normalized)
+            #   ✅ Cloud Run service: "my-app-feature-new-api"
+            #   ✅ All branch-specific resources in that workspace
+            #
+            # SAFETY:
+            #   - Only destroys resources for the SPECIFIED branch
+            #   - Master/main branches should never be deleted (org policy)
+            #   - Each workspace is isolated (no cross-branch impact)
+            #
+            # ═══════════════════════════════════════════════════════════════════════════════
+
+            # Set application name (CUSTOMIZE THIS FOR YOUR APP)
+            - export APP_NAME=ghost-context
+
+            # Determine deleted branch name:
+            # - BRANCH_NAME variable (set by webhook when PR merged with "Close source branch")
+            # - BITBUCKET_BRANCH (when manually triggered)
+            # - BITBUCKET_TAG (when triggered for tag deletion)
+            - export DELETED_BRANCH=${BRANCH_NAME:-${BITBUCKET_BRANCH:-${BITBUCKET_TAG}}}
+
+            # Validate branch name exists
+            - |
+              if [ -z "$DELETED_BRANCH" ]; then
+                echo "❌ ERROR: No branch or tag name provided"
+                echo "This pipeline must be manually triggered with a branch name."
+                echo "Go to: Pipelines → Run pipeline → Custom: branch-cleanup"
+                exit 1
+              fi
+
+            - echo "🗑️  Cleaning up Cloud Run resources for branch - ${DELETED_BRANCH}"
+            - echo "📦 Application - ${APP_NAME}"
+            - |
+              if [ -n "$BRANCH_NAME" ]; then
+                echo "🤖 Triggered automatically by PR merge webhook"
+              else
+                echo "👤 Triggered manually"
+              fi
+
+            # Clone infrastructure repo
+            - echo "Cloning infrastructure repo..."
+            - git clone git@bitbucket.org:sloanahrens/devops-cloud-run.git devops-cloud-run
+            - cd devops-cloud-run/devops-cloud-run
+
+            # Pull devops container
+            - echo "Pulling DevOps container..."
+            - cd docker
+            - ./pull-devops-image.sh master
+
+            # Normalize branch name for resource identification
+            - export NORMALIZED_BRANCH_TAG=$(../scripts/normalize-branch-tag.sh ${DELETED_BRANCH})
+            - echo "🏷️  Normalized branch tag - ${NORMALIZED_BRANCH_TAG}"
+            - echo "🎯 Target Cloud Run service - ${APP_NAME}-${NORMALIZED_BRANCH_TAG}"
+            - echo "📂 Target Terraform workspace - ${NORMALIZED_BRANCH_TAG}"
+
+            # Destroy Cloud Run resources for this branch
+            - echo "🚨 Destroying Cloud Run resources..."
+            - cd ../cloud-run
+            - ./cloud-run.sh destroy ${NORMALIZED_BRANCH_TAG}
+
+            - echo ""
+            - echo "✅ Successfully destroyed Cloud Run resources for deleted branch!"
+            - echo "   Branch - ${DELETED_BRANCH}"
+            - echo "   Service - ${APP_NAME}-${NORMALIZED_BRANCH_TAG}"
+            - echo "   Workspace - ${NORMALIZED_BRANCH_TAG}"
+            - echo ""
+            - echo "💰 Tip - This cleanup prevents orphaned resources and saves GCP costs"
+
+

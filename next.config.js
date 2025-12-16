@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable standalone output for Docker deployments
+  output: 'standalone',
   webpack: (config, { isServer }) => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
     

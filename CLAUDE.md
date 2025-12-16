@@ -10,9 +10,12 @@ Ghost Context is a Web3 wallet discovery app that analyzes NFTs, POAPs, and ERC-
 
 ```bash
 npm run dev          # Start development server on port 3000
+npm run dev:open     # Start dev server and open Chrome with DevTools
 npm run build        # Build for production
 npm run lint         # Run ESLint
 ```
+
+**Node.js Requirement**: v22.x or higher
 
 ## Architecture
 
@@ -23,12 +26,24 @@ npm run lint         # Run ESLint
 - Alchemy SDK for NFT data across multiple EVM chains
 - Moralis API for ERC-20 token holder data
 - POAP API for event-based collectibles
+- Neynar for Farcaster social data
+- Airstack for social graph queries
+
+### Supported Networks
+- **Alchemy**: Ethereum, Polygon, Arbitrum, Optimism, Base (Zora if SDK supports)
+- **POAP**: Treated as pseudo-network for event collections
+- **Moralis ERC-20**: Base network for token holder data
 
 ### Core Data Flow
 
 1. **Wallet Connection** (`src/app/providers.js`): Web3Modal setup with support for Ethereum, Polygon, Arbitrum, Optimism, and Base chains.
 
-2. **Collection Fetching** (`src/app/alchemy-multichain-client.js`): `AlchemyMultichainClient` wraps Alchemy SDK to query NFTs across multiple networks. Key method `getCollectionsForOwner()` fetches all NFT collections a wallet owns.
+2. **Collection Fetching** (`src/app/alchemy-multichain-client.js`): `AlchemyMultichainClient` wraps Alchemy SDK to query NFTs across multiple networks. Extended via prototype methods:
+   - `getCollectionsForOwner(wallet, filter, progressCallback)` - Fetches all NFT collections + POAPs for a wallet
+   - `getOwnersCountForContract(network, contract, maxCount)` - Counts owners with pagination
+   - `getLatestInboundTransferTimestamp(network, contract, wallet)` - Gets transfer history
+
+   The client handles image URL normalization for ipfs://, ar://, and other URI schemes.
 
 3. **Kindred Spirit Analysis**: Two pathways:
    - Client-side via `KindredSpiritsList.js`: Iterates selected collections, fetches all holders per collection, counts overlap
@@ -64,8 +79,21 @@ NEXT_PUBLIC_BASE_MAIN_API_KEY   # Alchemy - Base
 MORALIS_API_KEY                 # Moralis API for ERC-20 data
 MORALIS_PLAN                    # 'free' or 'starter' (affects rate limits)
 POAP_API_KEY                    # POAP API access
+NEXT_PUBLIC_NEYNAR_API_KEY      # Neynar API for Farcaster data
+NEXT_PUBLIC_AIRSTACK_KEY        # Airstack API for social graph queries
 ```
 
 ### Moralis Configuration
 
 `src/app/moralis-config.js` manages API rate limiting based on plan tier. Set `MORALIS_PLAN=starter` for higher throughput.
+
+### Asset Types
+
+The app analyzes three distinct asset types, each with its own data source:
+- **NFTs** (ERC-721/ERC-1155): Fetched via Alchemy SDK, supports multi-chain
+- **POAPs**: Event-based collectibles via POAP API, paginated at 500 per page
+- **ERC-20 Tokens**: Token holder data via Moralis API (Base network)
+
+### Testing
+
+- `/test-common-assets` - Debug page for testing the common assets finder feature
