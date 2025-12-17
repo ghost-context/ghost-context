@@ -1,8 +1,8 @@
-import { useEffect, useState, useContext, useRef } from "react";
+import { useEffect, useState, memo } from "react";
 
 import { Address } from './Address'
 
-export const SocialCard = ({ airstack, count, address , inModal }) => {
+export const SocialCard = memo(function SocialCard({ airstack, count, address, inModal }) {
     const [socials, setSocials] = useState([]);
     const [image, setImage] = useState("/kindredSpirit.png");
   
@@ -51,5 +51,5 @@ export const SocialCard = ({ airstack, count, address , inModal }) => {
         ))}
       </div>
     </div>
-    </div>)
-  };
+    </div>);
+});

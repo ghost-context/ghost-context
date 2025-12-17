@@ -34,8 +34,6 @@ export default function NftTableList() {
   const [collectionFilter, setcollectionFilter] = useState("relevant");
   const [networkFilter, setNetworkFilter] = useState("");
   const [networks, setNetworks] = useState([]);
-  const [filteredCollections, setFilteredCollections] = useState([]);
-  const [isFiltered, setIsFiltered] = useState(false);
   const [ownerCounts, setOwnerCounts] = useState({});
   const [sortBy, setSortBy] = useState('relevance'); // 'relevance' | 'newest'
   const {
@@ -68,28 +66,20 @@ export default function NftTableList() {
     setTotalOwnedCollections(uniqueCollections.length.toLocaleString());
     setTotalCollections(uniqueCollections);
     setCollections(uniqueCollections.slice(0, numCollectionsToShow));
-    if (typeof window !== 'undefined') {
-      window.__collections = uniqueCollections;
-      console.log('loaded collections sample', uniqueCollections.slice(0, 5).map(c => ({
-        name: c.name,
-        contract: c.contract_address,
-        network: c.network,
-        image_small_url: c.image_small_url
-      })));
-    }
     setIsLoadingModal(false);
   };
 
   
-  useEffect(() => {
-    let newFilteredCollections = totalCollections;
+  // Memoize filtered collections to avoid recalculating on every render
+  const computedFilteredCollections = useMemo(() => {
+    let result = totalCollections;
 
     if (networkFilter) {
-      newFilteredCollections = newFilteredCollections.filter((collection) => String(collection.network) === String(networkFilter));
+      result = result.filter((collection) => String(collection.network) === String(networkFilter));
     }
 
     if (searchQuery) {
-      newFilteredCollections = newFilteredCollections.filter((collection) => {
+      result = result.filter((collection) => {
         if (collection.name) {
           return collection.name.toLowerCase().includes(searchQuery.toLowerCase());
         }
@@ -97,18 +87,15 @@ export default function NftTableList() {
       });
     }
 
-    if(collectionFilter !== "large") {
-      newFilteredCollections = newFilteredCollections.filter((collection) => !collection.large_collection);
+    if (collectionFilter !== "large") {
+      result = result.filter((collection) => !collection.large_collection);
     }
 
-    if (networkFilter || searchQuery || collectionFilter ) {
-      setFilteredCollections(newFilteredCollections);
-      setIsFiltered(true);
-    } else {
-      setIsFiltered(false);
-      setFilteredCollections(collections);  // Reset the filteredCollections to the original list
-    }
-  }, [networkFilter, searchQuery, collectionFilter, totalCollections, collections]);
+    return result;
+  }, [networkFilter, searchQuery, collectionFilter, totalCollections]);
+
+  const isFiltered = networkFilter || searchQuery || collectionFilter;
+  const filteredCollections = isFiltered ? computedFilteredCollections : collections;
 
   // Keep displayed rows in sync with pagination
   useEffect(() => {
@@ -123,7 +110,6 @@ export default function NftTableList() {
       setNumCollectionsToShow(20);  // reset numCollectionsToShow state
       setPageKey(null);  // reset pageKey state
       fetchCollections(addressToFetch, collectionFilter);
-      setFilteredCollections([]);  // reset the filteredCollections state
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensAddress, address, collectionFilter]);
@@ -214,17 +200,6 @@ export default function NftTableList() {
       return tB - tA;
     };
     const arr = [...baseList].sort(comparator);
-    if (typeof window !== 'undefined') {
-      try {
-        console.log('sort:newest sample', arr.slice(0, 5).map(c => ({
-          name: c.name,
-          contract: c.contract_address,
-          inbound_latest: latestInboundByContract[c.contract_address] || null,
-          acquired_at_latest: c.acquired_at_latest,
-          acquired_at: c.acquired_at
-        })));
-      } catch {}
-    }
     return arr;
   }, [baseList, sortBy, latestInboundByContract]);
 
@@ -248,7 +223,7 @@ export default function NftTableList() {
       if (inboundFetchPendingRef.current) return;
       inboundFetchPendingRef.current = true;
       // Limit concurrency to avoid 429
-      const BATCH_SIZE = 1;
+      const BATCH_SIZE = 4;
       const nextMap = { ...latestInboundByContract };
       for (let i = 0; i < missing.length; i += BATCH_SIZE) {
         const batch = missing.slice(i, i + BATCH_SIZE);
