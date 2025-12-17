@@ -7,7 +7,8 @@ WORKDIR /app
 # ---- Dependencies ----
 FROM base AS deps
 # Add libc6-compat for Alpine compatibility with some npm packages
-RUN apk add --no-cache libc6-compat
+# Add python3, make, g++ for native module compilation (bufferutil, utf-8-validate)
+RUN apk add --no-cache libc6-compat python3 make g++
 
 # Copy package files and .npmrc for legacy-peer-deps
 COPY package.json package-lock.json* .npmrc ./
