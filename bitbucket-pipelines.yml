@@ -12,7 +12,6 @@ pipelines:
   default:
     - step:
         name: Deploy to Cloud Run
-        size: 2x  # 8GB RAM for Next.js build
         services:
           - docker
         script:
