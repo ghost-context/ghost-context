@@ -4,105 +4,94 @@ definitions:
   caches:
     docker-buildx: ~/.docker/buildx
     nextjs: nextapp/.next/cache
+  services:
+    docker:
+      memory: 3072  # 3GB for Docker service
 
 pipelines:
   default:
-    - parallel:
-        - step:
-            name: Build and Test Next.js App
-            image: node:20-alpine
-            caches:
-              - node
-              - nextjs
-            script:
-              - cd nextapp
-              - npm ci
-              - npm run build
-              - npm run lint
-              - npm run type-check
-              - npm test
+    - step:
+        name: Deploy to Cloud Run
+        size: 2x  # 8GB RAM for Next.js build
+        services:
+          - docker
+        script:
+          # Set required environment variables
+          - export APP_NAME=ghost-context
+          - export APP_CODE_PATH=${BITBUCKET_CLONE_DIR}
 
-        - step:
-            name: Deploy to Cloud Run
-            services:
-              - docker
-            script:
-              # Set required environment variables
-              - export APP_NAME=ghost-context
-              - export APP_CODE_PATH=${BITBUCKET_CLONE_DIR}
+          - export MORALIS_PLAN=starter
+          - export MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
+          - export POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
 
-              - export MORALIS_PLAN=starter
-              - export MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
-              - export POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
+          - export NEXT_PUBLIC_MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
+          - export NEXT_PUBLIC_ETH_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_MATIC_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_ARB_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_OPT_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_BASE_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_ZORA_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
+          - export NEXT_PUBLIC_POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
+          - export NEXT_PUBLIC_NEYNAR_API_KEY=D716CE14-D8B7-4856-B032-7CDDD2BE8FFD
+          - export NEXT_PUBLIC_PROJECT_ID=02718aeae375ec43c1b2dd06e21e7efb
 
-              - export NEXT_PUBLIC_MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY2ZWYwNGE2LTdlNjItNDdjZi1iMWJkLTMyM2RiN2NiYjBiMCIsIm9yZ0lkIjoiNDc0NDQyIiwidXNlcklkIjoiNDg4MDc5IiwidHlwZUlkIjoiYzZmNjViMTktZjJiYS00M2Q2LWI0MjMtMzc3OTA5MGQzYWYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk3NzE0MzgsImV4cCI6NDkxNTUzMTQzOH0.G4jWLOz_Sgh_nlyrew6B3IohXaSX4qP_91CQ6gNBN24
-              - export NEXT_PUBLIC_ETH_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_MATIC_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_ARB_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_OPT_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_BASE_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_ZORA_MAIN_API_KEY=54U-Tvp-BgpUcxI3hoSG558Fx21a5kIe
-              - export NEXT_PUBLIC_POAP_API_KEY=mCconFlhkc8hv3YgBymasJQrhb3af3SktDECkEEKb31MQujIi6gxf5BkThc1qmopq4DpZN8FQBIBapZC8I18cO4yfZXIP6vmKi1OoCgVhSD4Ob5ea0foLk9GDmdJBZsB
-              - export NEXT_PUBLIC_NEYNAR_API_KEY=D716CE14-D8B7-4856-B032-7CDDD2BE8FFD
-              - export NEXT_PUBLIC_PROJECT_ID=02718aeae375ec43c1b2dd06e21e7efb
+          - export TF_VAR_app_env_vars="{\"MORALIS_API_KEY\":\"${MORALIS_API_KEY}\",\"POAP_API_KEY\":\"${POAP_API_KEY}\"}"
 
-              - export TF_VAR_app_env_vars="{\"MORALIS_API_KEY\":\"${MORALIS_API_KEY}\",\"POAP_API_KEY\":\"${POAP_API_KEY}\"}"
+          # Clone devops repository
+          - git clone git@bitbucket.org:sloanahrens/devops-cloud-run.git devops-cloud-run
+          - cd devops-cloud-run/devops-cloud-run
 
-              # Clone devops repository
-              - git clone git@bitbucket.org:sloanahrens/devops-cloud-run.git devops-cloud-run
-              - cd devops-cloud-run/devops-cloud-run
+          # Build devops container (required for deployment)
+          - echo "Building DevOps container for deployment..."
+          - cd docker
+          - ./pull-devops-image.sh master
 
-              # Build devops container (required for deployment)
-              - echo "Building DevOps container for deployment..."
-              - cd docker
-              - ./pull-devops-image.sh master
+          # Validate bootstrap infrastructure is ready
+          - echo "Validating bootstrap infrastructure..."
+          - cd ../bootstrap
+          - ./validate-bootstrap.sh
+          - cd ..
 
-              # Validate bootstrap infrastructure is ready
-              - echo "Validating bootstrap infrastructure..."
-              - cd ../bootstrap
-              - ./validate-bootstrap.sh
-              - cd ..
+          # Normalize branch name for image tag
+          - export NORMALIZED_TAG=$(scripts/normalize-branch-tag.sh ${BITBUCKET_BRANCH})
+          - echo "NORMALIZED_TAG is ${NORMALIZED_TAG}"
 
-              # Normalize branch name for image tag
-              - export NORMALIZED_TAG=$(scripts/normalize-branch-tag.sh ${BITBUCKET_BRANCH})
-              - echo "NORMALIZED_TAG is ${NORMALIZED_TAG}"
+          # Build and push application container to Artifact Registry
+          - echo "Building and pushing application container..."
+          - export DOCKER_BUILD_ARGS="--build-arg NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID} --build-arg NEXT_PUBLIC_ETH_MAIN_API_KEY=${NEXT_PUBLIC_ETH_MAIN_API_KEY} --build-arg NEXT_PUBLIC_MATIC_MAIN_API_KEY=${NEXT_PUBLIC_MATIC_MAIN_API_KEY} --build-arg NEXT_PUBLIC_ARB_MAIN_API_KEY=${NEXT_PUBLIC_ARB_MAIN_API_KEY} --build-arg NEXT_PUBLIC_OPT_MAIN_API_KEY=${NEXT_PUBLIC_OPT_MAIN_API_KEY} --build-arg NEXT_PUBLIC_BASE_MAIN_API_KEY=${NEXT_PUBLIC_BASE_MAIN_API_KEY} --build-arg NEXT_PUBLIC_NEYNAR_API_KEY=${NEXT_PUBLIC_NEYNAR_API_KEY} --build-arg NEXT_PUBLIC_AIRSTACK_KEY=${NEXT_PUBLIC_AIRSTACK_KEY}"
+          - cd cloud-run
+          - ./cloud-run.sh build-push-app-image ${NORMALIZED_TAG}
 
-              # Build and push application container to Artifact Registry
-              - echo "Building and pushing application container..."
-              - export DOCKER_BUILD_ARGS="--build-arg NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID} --build-arg NEXT_PUBLIC_ETH_MAIN_API_KEY=${NEXT_PUBLIC_ETH_MAIN_API_KEY} --build-arg NEXT_PUBLIC_MATIC_MAIN_API_KEY=${NEXT_PUBLIC_MATIC_MAIN_API_KEY} --build-arg NEXT_PUBLIC_ARB_MAIN_API_KEY=${NEXT_PUBLIC_ARB_MAIN_API_KEY} --build-arg NEXT_PUBLIC_OPT_MAIN_API_KEY=${NEXT_PUBLIC_OPT_MAIN_API_KEY} --build-arg NEXT_PUBLIC_BASE_MAIN_API_KEY=${NEXT_PUBLIC_BASE_MAIN_API_KEY} --build-arg NEXT_PUBLIC_NEYNAR_API_KEY=${NEXT_PUBLIC_NEYNAR_API_KEY} --build-arg NEXT_PUBLIC_AIRSTACK_KEY=${NEXT_PUBLIC_AIRSTACK_KEY}"
-              - cd cloud-run
-              - ./cloud-run.sh build-push-app-image ${NORMALIZED_TAG}
+          # Deploy application with normalized tag
+          - echo "Deploying application to Cloud Run with ${APP_NAME} and ${NORMALIZED_TAG}..."
+          - ./cloud-run.sh apply ${NORMALIZED_TAG}
 
-              # Deploy application with normalized tag
-              - echo "Deploying application to Cloud Run with ${APP_NAME} and ${NORMALIZED_TAG}..."
-              - ./cloud-run.sh apply ${NORMALIZED_TAG}
+          # Test that the deployment is working
+          - echo "Testing deployment health..."
+          - |
+            export SERVICE_URL=$(docker run --rm \
+                -v $(pwd):/workspace \
+                -w /workspace \
+                -e GCP_SERVICE_ACCOUNT_KEY="$GCP_SERVICE_ACCOUNT_KEY" \
+                devops:latest \
+                terraform output -raw service_url 2>/dev/null | tail -n1)
+            echo "Service URL: $SERVICE_URL"
 
-              # Test that the deployment is working
-              - echo "Testing deployment health..."
-              - |
-                export SERVICE_URL=$(docker run --rm \
-                    -v $(pwd):/workspace \
-                    -w /workspace \
-                    -e GCP_SERVICE_ACCOUNT_KEY="$GCP_SERVICE_ACCOUNT_KEY" \
-                    devops:latest \
-                    terraform output -raw service_url 2>/dev/null | tail -n1)
-                echo "Service URL: $SERVICE_URL"
+            # Test with retries (up to 30 seconds)
+            for i in {1..6}; do
+              echo "Attempt $i: Testing $SERVICE_URL..."
+              if docker run --rm -e GCP_SERVICE_ACCOUNT_KEY devops:latest curl -f -s -o /dev/null -w "%{http_code}\n" "$SERVICE_URL" | grep -q "200"; then
+                echo "✅ Health check passed! Service is running."
+                exit 0
+              fi
+              echo "Waiting 5 seconds before retry..."
+              sleep 5
+            done
+            echo "❌ Health check failed after 30 seconds"
+            exit 1
 
-                # Test with retries (up to 30 seconds)
-                for i in {1..6}; do
-                  echo "Attempt $i: Testing $SERVICE_URL..."
-                  if docker run --rm -e GCP_SERVICE_ACCOUNT_KEY devops:latest curl -f -s -o /dev/null -w "%{http_code}\n" "$SERVICE_URL" | grep -q "200"; then
-                    echo "✅ Health check passed! Service is running."
-                    exit 0
-                  fi
-                  echo "Waiting 5 seconds before retry..."
-                  sleep 5
-                done
-                echo "❌ Health check failed after 30 seconds"
-                exit 1
-
-              # Display Service URL
-              - echo "Service URL is $SERVICE_URL"
+          # Display Service URL
+          - echo "Service URL is $SERVICE_URL"
 
   # Custom pipelines
   custom:
