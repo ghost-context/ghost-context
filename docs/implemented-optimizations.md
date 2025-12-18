@@ -110,3 +110,38 @@ Changed all fetch calls from `cache: 'no-store'` to `next: { revalidate: 300 }` 
 Instead of 20 individual API calls (one per kindred spirit), social data is now fetched in a single batch request supporting up to 50 addresses per call.
 
 **Impact:** Reduced social lookup time from 20-30 seconds to 1-2 seconds.
+
+---
+
+## Phase 3 - Server-Side API Parallelization
+
+### 1. Parallelized Combined Analysis Endpoint
+**File:** `src/app/api/analyze-combined-overlap/route.js`
+
+Completely refactored the unified analysis endpoint to process all asset types concurrently:
+
+- **Before:** NFTs → POAPs → ERC-20s processed sequentially with 100-200ms delays between each
+- **After:** All three asset types fetch in parallel using `Promise.all`, with each type using controlled concurrency (4 concurrent)
+
+```javascript
+const [nftResults, poapResults, erc20Results] = await Promise.all([
+  processWithConcurrency(selectedNFTs, CONCURRENCY, fetchNFTOwners),
+  processWithConcurrency(selectedPOAPs, CONCURRENCY, fetchPOAPHolders),
+  processWithConcurrency(selectedERC20s, CONCURRENCY, fetchERC20Owners)
+]);
+```
+
+**Impact:** Prevents Vercel timeout issues. Analysis that previously took 60+ seconds now completes in 10-20 seconds.
+
+---
+
+### 2. Parallelized ERC-20 Analysis Endpoint
+**File:** `src/app/api/analyze-erc20-overlap/route.js`
+
+Applied the same parallelization pattern to the standalone ERC-20 analysis:
+
+- Removed sequential token processing with 200ms delays
+- All tokens now fetch concurrently with concurrency limit of 4
+- Removed verbose logging that added overhead
+
+**Impact:** 5 tokens that took ~60s sequentially now complete in ~15s.

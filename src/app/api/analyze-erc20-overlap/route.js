@@ -2,12 +2,33 @@
 // Accepts a list of token addresses to analyze
 import { MoralisConfig } from '../../moralis-config.js';
 
+// Concurrent pool helper - processes items with limited concurrency
+async function processWithConcurrency(items, concurrency, processor) {
+  const results = [];
+  const executing = new Set();
+
+  for (const item of items) {
+    const promise = processor(item).then(result => {
+      executing.delete(promise);
+      return result;
+    });
+    executing.add(promise);
+    results.push(promise);
+
+    if (executing.size >= concurrency) {
+      await Promise.race(executing);
+    }
+  }
+
+  return Promise.all(results);
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
     const address = (body.address || '').trim().toLowerCase();
     const tokenAddresses = body.tokens || []; // Array of token addresses to analyze
-    
+
     if (!address) {
       return new Response(
         JSON.stringify({ error: 'Missing address parameter' }),
@@ -31,14 +52,8 @@ export async function POST(request) {
     }
 
     const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
-    const chain = '0x2105'; // Base network (we know this works from test)
-
-    // Log configuration
-    MoralisConfig.logConfig();
-    
-    console.log('[ERC-20 Overlap] Analyzing wallet:', address);
-    console.log('[ERC-20 Overlap] Analyzing', tokenAddresses.length, 'selected tokens');
-    console.log('[ERC-20 Overlap] Token addresses:', tokenAddresses.map(t => `${t.symbol} (${t.address})`).join(', '));
+    const chain = '0x2105'; // Base network
+    const maxHoldersPerToken = 150000;
 
     // Build token metadata from provided addresses
     const selectedTokens = tokenAddresses.map(t => ({
@@ -48,89 +63,66 @@ export async function POST(request) {
       holderCount: t.holderCount
     }));
 
-    // For each token, PAGINATE through ALL holders (like NFT code does)
-    const overlapMap = new Map(); // wallet -> { count, tokens: [] }
-    const maxHoldersPerToken = 150000; // Same limit as NFT analysis for performance
-
-    for (const token of selectedTokens) {
+    // Fetch owners for a single token (to be run in parallel)
+    const fetchTokenOwners = async (token) => {
       try {
         let allOwners = [];
         let cursor = null;
-        let totalFetched = 0;
 
-        console.log('[ERC-20 Overlap] Fetching ALL holders for:', token.symbol);
-
-        // Paginate through ALL holders
         do {
-          const ownersUrl = cursor 
-            ? `${baseUrl}/erc20/${token.address}/owners?chain=${chain}&limit=${MoralisConfig.pageSize}&cursor=${cursor}`
-            : `${baseUrl}/erc20/${token.address}/owners?chain=${chain}&limit=${MoralisConfig.pageSize}`;
-          
-          console.log('[ERC-20 Overlap] Fetching owners URL:', ownersUrl);
-            
-          const ownersResponse = await fetch(ownersUrl, {
-            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+          const params = new URLSearchParams({
+            chain: chain,
+            limit: String(MoralisConfig.pageSize)
           });
+          if (cursor) params.set('cursor', cursor);
 
-          console.log('[ERC-20 Overlap]', token.symbol, 'response status:', ownersResponse.status);
+          const response = await fetch(
+            `${baseUrl}/erc20/${token.address}/owners?${params}`,
+            { headers: { 'Accept': 'application/json', 'X-API-Key': apiKey } }
+          );
 
-          if (!ownersResponse.ok) {
-            const errorText = await ownersResponse.text();
-            console.warn('[ERC-20 Overlap] ❌ Failed to get owners for:', token.symbol, 'Status:', ownersResponse.status, 'Error:', errorText);
-            break;
-          }
+          if (!response.ok) break;
 
-          const ownersData = await ownersResponse.json();
-          console.log('[ERC-20 Overlap]', token.symbol, 'response preview:', JSON.stringify(ownersData).substring(0, 200));
-          
-          const owners = ownersData.result || [];
-          
-          allOwners.push(...owners);
-          totalFetched += owners.length;
-          cursor = ownersData.cursor; // Next page cursor
+          const data = await response.json();
+          const owners = data.result || [];
+          allOwners = allOwners.concat(owners);
+          cursor = data.cursor || null;
 
-          console.log('[ERC-20 Overlap]', token.symbol, '- fetched', totalFetched, 'holders so far...');
-
-          // Safety limit like NFT code
-          if (totalFetched >= maxHoldersPerToken) {
-            console.log('[ERC-20 Overlap]', token.symbol, '- reached max holder limit');
-            break;
-          }
-
-          // Small delay between pages to avoid rate limiting
-          if (cursor) {
-            await new Promise(resolve => setTimeout(resolve, MoralisConfig.delayMs));
-          }
-
+          if (allOwners.length >= maxHoldersPerToken) break;
         } while (cursor);
 
-        console.log('[ERC-20 Overlap]', token.symbol, '- TOTAL:', allOwners.length, 'holders');
-
-        // Count overlaps from ALL holders
-        for (const owner of allOwners) {
-          const ownerAddress = owner.owner_address.toLowerCase();
-          
-          // Skip the source wallet
-          if (ownerAddress === address) continue;
-
-          if (!overlapMap.has(ownerAddress)) {
-            overlapMap.set(ownerAddress, { count: 0, tokens: [] });
-          }
-
-          const overlap = overlapMap.get(ownerAddress);
-          overlap.count += 1;
-          overlap.tokens.push({
-            symbol: token.symbol,
-            name: token.name,
-            balance: owner.balance_formatted
-          });
-        }
+        return { token, owners: allOwners };
       } catch (err) {
-        console.warn('[ERC-20 Overlap] Error getting owners for:', token.symbol, err.message);
+        return { token, owners: [] };
       }
+    };
 
-      // Small delay between tokens
-      await new Promise(resolve => setTimeout(resolve, 200));
+    // Process all tokens in parallel with concurrency limit
+    const CONCURRENCY = 4;
+    const results = await processWithConcurrency(selectedTokens, CONCURRENCY, fetchTokenOwners);
+
+    // Aggregate results into overlap map
+    const overlapMap = new Map(); // wallet -> { count, tokens: [] }
+
+    for (const { token, owners } of results) {
+      for (const owner of owners) {
+        const ownerAddress = owner.owner_address.toLowerCase();
+
+        // Skip the source wallet
+        if (ownerAddress === address) continue;
+
+        if (!overlapMap.has(ownerAddress)) {
+          overlapMap.set(ownerAddress, { count: 0, tokens: [] });
+        }
+
+        const overlap = overlapMap.get(ownerAddress);
+        overlap.count += 1;
+        overlap.tokens.push({
+          symbol: token.symbol,
+          name: token.name,
+          balance: owner.balance_formatted
+        });
+      }
     }
 
     // Step 4: Sort kindred spirits by overlap count
