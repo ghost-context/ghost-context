@@ -20,7 +20,7 @@ export async function GET(request) {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[POAP Event Details] request', { id, url });
     }
-    const res = await fetch(url, { headers, cache: 'no-store' });
+    const res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
     if (!res.ok) {
       let bodyText = '';
       try { bodyText = await res.text(); } catch { bodyText = ''; }
