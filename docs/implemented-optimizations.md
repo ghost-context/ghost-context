@@ -145,3 +145,40 @@ Applied the same parallelization pattern to the standalone ERC-20 analysis:
 - Removed verbose logging that added overhead
 
 **Impact:** 5 tokens that took ~60s sequentially now complete in ~15s.
+
+---
+
+## Phase 4 - N+1 Query Fix
+
+### 1. Batched Owner Count Fetching
+**File:** `src/app/components/NftTableList.js`
+
+Fixed the N+1 query problem where each visible collection row triggered a separate `getOwnersCountForContract()` call simultaneously, causing Alchemy 429 rate limit errors.
+
+**Changes:**
+- Added `ownerCountFetchingRef` to prevent concurrent fetch operations
+- Process owner count requests in batches of 3 with controlled concurrency
+- Skip collections that already have `distinct_owner_count` from initial load
+- Update UI progressively as each batch completes (better UX)
+
+```javascript
+const BATCH_SIZE = 3;
+for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+  const batch = missing.slice(i, i + BATCH_SIZE);
+  const batchResults = await Promise.all(batch.map(async (c) => {
+    const count = await alchemy.getOwnersCountForContract(...);
+    return [c.contract_address, count];
+  }));
+  // Update state progressively
+  setOwnerCounts(prev => ({ ...prev, ...Object.fromEntries(batchResults) }));
+}
+```
+
+**Impact:** Eliminates 429 rate limiting errors, smoother table load experience.
+
+---
+
+### 2. Added Caching to POAP Owner Count
+**File:** `src/app/alchemy-multichain-client.js`
+
+Changed POAP fetch in `getOwnersCountForContract` from `cache: 'no-store'` to `next: { revalidate: 300 }` for 5-minute caching.

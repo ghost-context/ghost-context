@@ -248,22 +248,44 @@ export default function NftTableList() {
   }, [sortBy, collectionsToDisplay, numCollectionsToShow, ensAddress, address]);
 
   // Enrich visible rows with owner counts lazily using a separate map to avoid re-writing arrays
+  // Uses controlled concurrency to avoid Alchemy rate limiting (429 errors)
+  const ownerCountFetchingRef = useRef(false);
   useEffect(() => {
     const enrich = async () => {
       const visible = (isFiltered ? filteredCollections : collections).slice(0, numCollectionsToShow);
-      const missing = visible.filter(c => ownerCounts[c.contract_address] == null);
+      // Skip collections that already have counts (either fetched or from distinct_owner_count)
+      const missing = visible.filter(c =>
+        ownerCounts[c.contract_address] == null &&
+        c.distinct_owner_count == null &&
+        c.network !== 'POAP' // POAP counts are fetched differently
+      );
       if (missing.length === 0) return;
-      const results = await Promise.all(missing.map(async (c) => {
-        const count = await alchemy.getOwnersCountForContract(c.network, c.contract_address, 25000);
-        return [c.contract_address, count];
-      }));
-      setOwnerCounts(prev => {
-        const next = { ...prev };
-        for (const [addr, cnt] of results) {
-          next[addr] = cnt;
-        }
-        return next;
-      });
+      if (ownerCountFetchingRef.current) return; // Prevent concurrent fetches
+      ownerCountFetchingRef.current = true;
+
+      // Process in batches with controlled concurrency
+      const BATCH_SIZE = 3;
+      const allResults = [];
+
+      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+        const batch = missing.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(async (c) => {
+          const count = await alchemy.getOwnersCountForContract(c.network, c.contract_address, 25000);
+          return [c.contract_address, count];
+        }));
+        allResults.push(...batchResults);
+
+        // Update state progressively so UI shows counts as they load
+        setOwnerCounts(prev => {
+          const next = { ...prev };
+          for (const [addr, cnt] of batchResults) {
+            next[addr] = cnt;
+          }
+          return next;
+        });
+      }
+
+      ownerCountFetchingRef.current = false;
     };
     if ((isFiltered ? filteredCollections : collections).length) {
       enrich();

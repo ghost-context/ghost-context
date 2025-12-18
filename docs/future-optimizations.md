@@ -4,20 +4,7 @@ This document outlines performance improvements that could be implemented in fut
 
 ## Critical Issues (Not Yet Addressed)
 
-### 1. N+1 Query Problem for Owner Counts
-**File:** `src/app/components/NftTableList.js`
-
-**Problem:** Each visible collection triggers a separate `getOwnersCountForContract()` call when rendered.
-
-**Impact:** Displaying 20 collections = 20 simultaneous Alchemy requests, leading to 429 rate limiting and slow table load.
-
-**Recommended Fix:** Batch owner count requests or fetch counts during initial collection load.
-
-**Effort:** ~1-2 hours
-
----
-
-### 2. Memory Bloat in Server Analysis
+### 1. Memory Bloat in Server Analysis
 **File:** `src/app/api/analyze-combined-overlap/route.js`
 
 **Problem:** Stores full asset objects for every wallet in `overlapMap`. With 5 collections x 150k holders, this creates 750k+ entries.
