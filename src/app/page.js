@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Web3Provider } from './providers';
 import Hero from './components/Hero';
 import TableList from './components/NftTableList';
@@ -10,9 +10,15 @@ import { FetchDataProvider } from './components/context/KindredButtonContext';
 export default function App() {
   const [ensAddress, setEnsAddress] = useState(null);
 
+  // Memoize context value to prevent unnecessary re-renders
+  const ensContextValue = useMemo(
+    () => ({ ensAddress, setEnsAddress }),
+    [ensAddress]
+  );
+
   return (
     <Web3Provider>
-      <EnsContext.Provider value={{ ensAddress, setEnsAddress }}>
+      <EnsContext.Provider value={ensContextValue}>
         <FetchDataProvider>
           <Hero />
           <KindredSpiritsList />

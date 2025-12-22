@@ -1,29 +1,14 @@
-import { Fragment, useState, useEffect   } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { SocialCard } from './SocialCard'
 
 export default function NftModal({ onClose, airstack, address, count, contractsInCommon }) {
   const [open, setOpen] = useState(true);
-  const [contractsList, setContractsList] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  const modalContracts = async () => {
-    const result = []
-    for (const key in contractsInCommon) {
-      result.push(contractsInCommon[key].name)
-    }
-    return result
-  }
-
-  useEffect(() => {
-    const fetchContracts = async () => {
-        setLoading(true);
-        const contracts = await modalContracts();
-        setContractsList(contracts);
-        setLoading(false);
-        };
-        fetchContracts();
-    }, [contractsInCommon]);
+  // Memoize contracts list - this is a synchronous transform, no need for useEffect
+  const contractsList = useMemo(() => {
+    return Object.values(contractsInCommon || {}).map(item => item.name);
+  }, [contractsInCommon]);
 
   return (
     <Transition.Root show={open} as={Fragment}>
@@ -55,21 +40,15 @@ export default function NftModal({ onClose, airstack, address, count, contractsI
               <SocialCard airstack={airstack} address={address} count={count} inModal={true}/>
                <div className="text-gray-700 px-4 py-5 sm:px-6">
                   <h2 className='pb-2'>You have <span className='font-semibold'>{count}</span> collections in common</h2>
-                  {loading ? (
-                    <div className='flex justify-center items-center align-middle pt-1'>
-                      <p className='ml-3 mx-2 text-purple-500 bg-purple-500/10 max-w-button ring-purple-500/30 rounded-md flex-none py-1 px-2 text-xs font-medium ring-1 ring-inset'>Loading...</p>
-                    </div>
-                  ) : (
-                    <ul>
-                      {contractsList.map((contract, i) => (
-                        <li key={contract+i} className="flex justify-between items-center align-middle pt-1">
-                          <div className='text-xs'>
-                          {contract }
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <ul>
+                    {contractsList.map((contract, i) => (
+                      <li key={contract+i} className="flex justify-between items-center align-middle pt-1">
+                        <div className='text-xs'>
+                        {contract}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </Dialog.Panel>
             </Transition.Child>

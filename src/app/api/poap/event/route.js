@@ -67,7 +67,7 @@ export async function GET(request) {
       if (process.env.NODE_ENV !== 'production') {
         console.log('[POAP Event Holders] request', { id, url, limit: firstLimit, offset: pageNum * firstLimit, page: pageNum });
       }
-      let res = await fetch(url, { headers, cache: 'no-store' });
+      let res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
       if (res.ok) {
         const data = await res.json();
         if (process.env.NODE_ENV !== 'production') {
@@ -101,7 +101,7 @@ export async function GET(request) {
       if (process.env.NODE_ENV !== 'production') {
         console.log('[POAP Event Holders] fallback request', { id, url, limit: secondLimit, offset: pageNum * secondLimit, page: pageNum });
       }
-      res = await fetch(url, { headers, cache: 'no-store' });
+      res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
       if (!res.ok) {
         let bodyText2 = '';
         try { bodyText2 = await res.text(); } catch { bodyText2 = ''; }
@@ -155,7 +155,7 @@ export async function GET(request) {
       if (total === 0) {
         try {
           const detailsUrl = `https://api.poap.tech/events/id/${encodeURIComponent(id)}`;
-          const detailsRes = await fetch(detailsUrl, { headers, cache: 'no-store' });
+          const detailsRes = await fetch(detailsUrl, { headers, next: { revalidate: 300 } });
           if (detailsRes.ok) {
             const ev = await detailsRes.json();
             const supply = Number(ev?.supply || 0);

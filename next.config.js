@@ -1,5 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable standalone output for Docker deployments
+  output: 'standalone',
+  // Rewrite /health to /api/health for Cloud Run health checks
+  async rewrites() {
+    return [
+      {
+        source: '/health',
+        destination: '/api/health',
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
     
