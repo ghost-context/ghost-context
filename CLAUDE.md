@@ -1,165 +1,60 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Overview
 
-## Project Overview
-
-Ghost Context is a Web3 wallet discovery app that analyzes NFTs, POAPs, and ERC-20 tokens held by a wallet to find "kindred spirits" - other wallets with similar asset holdings. Users connect a wallet or enter an ENS address, select collections to analyze, and the app identifies wallets with the most overlap.
+Ghost Context: Web3 app that finds "kindred spirits" - wallets with similar NFT, POAP, and ERC-20 holdings.
 
 ## Commands
 
 ```bash
-npm run dev          # Start development server on port 3000
-npm run dev:open     # Start dev server and open Chrome with DevTools
-npm run build        # Build for production
-npm run lint         # Run ESLint
+npm run dev       # Dev server on port 3000
+npm run build     # Production build
+npm run lint      # ESLint
 ```
 
-**Node.js Requirement**: v22.x
-
-## Code Metrics
-
-- Files: 40 | Lines: ~6,200
-- Functions: 76 (avg 34 lines)
-- Complexity flags: 2 large files, 15+ long functions
-
-See [docs/tech-review.md](docs/tech-review.md) for detailed analysis and improvement plans.
+Requires Node.js v22.x
 
 ## Architecture
 
-### Tech Stack
-- Next.js 14 (App Router)
-- React 18 with Tailwind CSS
-- WalletConnect (Web3Modal) + Wagmi for wallet connection
-- Alchemy SDK for NFT data across multiple EVM chains
-- Moralis API for ERC-20 token holder data
-- POAP API for event-based collectibles
-- Neynar for Farcaster social data
-- Airstack for social graph queries
+**Stack:** Next.js 14 (App Router), React 18, Tailwind, WalletConnect/Wagmi
 
-### Supported Networks
-- **Alchemy**: Ethereum, Polygon, Arbitrum, Optimism, Base
-- **POAP**: Treated as pseudo-network for event collections
-- **Moralis ERC-20**: Base network for token holder data
+**APIs:**
+- Alchemy SDK — NFTs across Ethereum, Polygon, Arbitrum, Optimism, Base
+- Moralis — ERC-20 token holders (Base network)
+- POAP — Event-based collectibles
+- Neynar/Airstack — Farcaster social data
 
-### Core Data Flow
+**Key Files:**
+- `src/app/alchemy-multichain-client.js` — Multi-chain NFT fetching
+- `src/app/api/analyze-combined-overlap/route.js` — Main analysis endpoint
+- `src/app/components/context/` — EnsContext, KindredButtonContext
 
-1. **Wallet Connection** (`src/app/providers.js`): Web3Modal setup with support for Ethereum, Polygon, Arbitrum, Optimism, and Base chains.
+**Constraints:**
+- 150k holder limit per collection
+- Top 100 kindred spirits returned
+- 2+ shared assets required for multi-asset analysis
 
-2. **Collection Fetching** (`src/app/alchemy-multichain-client.js`): `AlchemyMultichainClient` wraps Alchemy SDK to query NFTs across multiple networks. Extended via prototype methods:
-   - `getCollectionsForOwner(wallet, filter, progressCallback)` - Fetches all NFT collections + POAPs for a wallet
-   - `getOwnersCountForContract(network, contract, maxCount)` - Counts owners with pagination
-   - `getLatestInboundTransferTimestamp(network, contract, wallet)` - Gets transfer history
-
-   The client handles image URL normalization for ipfs://, ar://, and other URI schemes.
-
-3. **Kindred Spirit Analysis**: Two pathways:
-   - Client-side via `KindredSpiritsList.js`: Iterates selected collections, fetches all holders per collection, counts overlap
-   - Server-side via `/api/analyze-combined-overlap/route.js`: Unified endpoint that analyzes NFTs (Alchemy), POAPs, and ERC-20s (Moralis) together
-
-4. **State Management** (`src/app/components/context/`):
-   - `EnsContext`: Stores resolved ENS address
-   - `KindredButtonContext`: Manages selected collections, triggers analysis, stores results
-
-### API Routes (`src/app/api/`)
-
-- `/api/analyze-combined-overlap` - Main unified analysis endpoint combining NFTs, POAPs, and ERC-20s
-- `/api/analyze-erc20-overlap` - ERC-20 specific analysis using Moralis
-- `/api/get-filtered-tokens` - Fetch tokens with filtering options
-- `/api/poap/*` - POAP event data and holder fetching
-- `/api/socials/farcaster` - Farcaster profile lookup
-
-### Key Constraints
-
-- **150k holder limit**: Analysis caps at 150,000 holders per collection to prevent memory issues
-- **Top 100 results**: Kindred spirits list is capped at 100 wallets
-- **Minimum overlap threshold**: When analyzing 2+ assets, requires at least 2 shared assets to qualify as kindred
-
-### Environment Variables Required
-
-```
-NEXT_PUBLIC_PROJECT_ID          # WalletConnect project ID
-NEXT_PUBLIC_ETH_MAIN_API_KEY    # Alchemy - Ethereum
-NEXT_PUBLIC_MATIC_MAIN_API_KEY  # Alchemy - Polygon
-NEXT_PUBLIC_ARB_MAIN_API_KEY    # Alchemy - Arbitrum
-NEXT_PUBLIC_OPT_MAIN_API_KEY    # Alchemy - Optimism
-NEXT_PUBLIC_BASE_MAIN_API_KEY   # Alchemy - Base
-MORALIS_API_KEY                 # Moralis API for ERC-20 data (server-side)
-MORALIS_PLAN                    # 'free' or 'starter' (affects rate limits)
-POAP_API_KEY                    # POAP API access (server-side)
-NEXT_PUBLIC_NEYNAR_API_KEY      # Neynar API for Farcaster data
-NEXT_PUBLIC_AIRSTACK_KEY        # Airstack API for social graph queries
-```
-
-### Moralis Configuration
-
-`src/app/moralis-config.js` manages API rate limiting based on plan tier. Set `MORALIS_PLAN=starter` for higher throughput.
-
-### Asset Types
-
-The app analyzes three distinct asset types, each with its own data source:
-- **NFTs** (ERC-721/ERC-1155): Fetched via Alchemy SDK, supports multi-chain
-- **POAPs**: Event-based collectibles via POAP API, paginated at 500 per page
-- **ERC-20 Tokens**: Token holder data via Moralis API (Base network)
-
-## Shared Utilities
-
-Located in `src/app/lib/`:
+## Shared Utilities (`src/app/lib/`)
 
 | File | Purpose |
 |------|---------|
-| `concurrency.js` | `processWithConcurrency()` - parallel processing with limit |
-| `validation.js` | Address/ENS/eventId validation for API routes |
-| `address-utils.js` | `shortenAddress()` formatting utility |
-| `fetch-utils.js` | `fetchJson()` - standardized fetch with error handling |
+| `concurrency.js` | Parallel processing with limit |
+| `validation.js` | Address/ENS/eventId validation |
+| `address-utils.js` | `shortenAddress()` formatting |
+| `fetch-utils.js` | Standardized fetch with error handling |
 
-## Known Issues & Technical Debt
+## Environment Variables
 
-### Complexity Hotspots
-- `src/app/components/NftTableList.js` (542 lines) - needs splitting
-- `src/app/components/KindredSpiritsList.js` (414 lines) - needs splitting
-- `src/app/test-common-assets/page.js` (1953 lines) - debug page, low priority
+```
+NEXT_PUBLIC_PROJECT_ID          # WalletConnect
+NEXT_PUBLIC_ETH_MAIN_API_KEY    # Alchemy keys (ETH, MATIC, ARB, OPT, BASE)
+MORALIS_API_KEY                 # Server-side
+POAP_API_KEY                    # Server-side
+NEXT_PUBLIC_NEYNAR_API_KEY      # Farcaster
+NEXT_PUBLIC_AIRSTACK_KEY        # Social graph
+```
 
-### Security Notes
-- NEXT_PUBLIC keys are exposed in browser bundle (Alchemy, Neynar, Airstack)
-- No rate limiting on API routes - relies on upstream API limits
-- ~~API routes validate address presence but not format~~ ✅ Fixed - validation.js
-- ~~Debug param exposes raw API responses~~ ✅ Fixed - restricted to non-production
+## Docs
 
-### Missing
-- No tests (no test framework configured)
-- No TypeScript (all vanilla JS)
-- No error boundary component
-
-### Improvement Plans
-See `docs/plans/` for detailed implementation designs (in recommended order):
-1. `quick-wins-design.md` - ✅ Done
-2. `performance-optimizations-design.md` - Memory, caching, streaming (~14-17h)
-3. `security-hardening-design.md` - API key protection, rate limiting (~12-15h)
-4. `component-refactoring-design.md` - Split large components (~14-19h)
-5. `typescript-unit-tests-design.md` - TS + Jest setup (~12-18h)
-6. `e2e-tests-design.md` - Playwright E2E tests (~12-16h)
-
-## Testing
-
-- `/test-common-assets` - Debug page for testing the common assets finder feature
-- Run `npm run build` to verify compilation
-- Run `npm run lint` to check for ESLint issues
-
-## Performance History
-
-Previous optimization work (already implemented):
-
-| Phase | Changes | Impact |
-|-------|---------|--------|
-| Quick Wins | Memoized context values, removed debug logging, useMemo for filtering | Reduced unnecessary re-renders |
-| Parallelization | `processWithConcurrency()` for collection fetching, batch social lookups | Analysis: 2-5min → 30-60s |
-| Server-Side | Parallel NFT/POAP/ERC-20 fetching in analyze-combined-overlap | 60s → 10-20s, prevents Vercel timeout |
-| N+1 Fix | Batched owner count fetching (3 concurrent) | Eliminated Alchemy 429 rate limit errors |
-| Caching | POAP routes use 5-minute cache (`next: { revalidate: 300 }`) | Fewer repeated API calls |
-
-## Deployment
-
-- **Vercel**: Deploys from `sloan-updates` branch
-- **Docker**: `Dockerfile` configured for standalone Next.js output
-- **Cloud Run**: `bitbucket-pipelines.yml` for GCP deployment
+- [Technical Review](docs/tech-review.md) — Issues, metrics, improvement plans
+- [Proposal](docs/proposal.md) — Summary of planned improvements
