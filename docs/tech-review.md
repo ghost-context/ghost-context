@@ -103,50 +103,40 @@ src/app/
 - [ ] Validate origin header on POST endpoints
 - [ ] Audit error messages for information leakage
 
-## Time Estimates
+## Implementation Plans
 
-### Quick Wins (~3 hours total)
+Detailed design documents are available in `docs/plans/`:
+
+| Plan | Hours | Description | Status |
+|------|-------|-------------|--------|
+| [Quick Wins](plans/2026-01-09-quick-wins-design.md) | 2-3h | fetchJson utility, error message audit, key fallback removal | ⏳ Remaining |
+| [Security Hardening](plans/2026-01-09-security-hardening-design.md) | 12-15h | Move Alchemy to server, rate limiting, CSRF protection | ⏳ Pending |
+| [Component Refactoring](plans/2026-01-09-component-refactoring-design.md) | 14-19h | Split large components, extract hooks, consolidate modals | ⏳ Pending |
+| [TypeScript + Unit Tests](plans/2026-01-09-typescript-unit-tests-design.md) | 12-18h | TS migration, Jest setup, utility & hook tests | ⏳ Pending |
+| [E2E Tests](plans/2026-01-09-e2e-tests-design.md) | 12-16h | Playwright setup, critical flow tests, CI integration | ⏳ Pending |
+
+### Completed Quick Wins (2026-01-09)
+
 | Task | Time | Status |
 |------|------|--------|
 | Add address validation regex to 6 API routes | 0.5h | ✅ Done |
 | Disable `?debug=1` in production | 0.25h | ✅ Done |
 | Extract `processWithConcurrency()` to shared lib | 1h | ✅ Done |
-| Extract `fetchJson()` utility | 1h | ⏳ Pending |
 | Extract address formatting utility | 0.25h | ✅ Done |
 
-### Medium Effort (~8-12 hours total)
-| Task | Time | Status |
-|------|------|--------|
-| Split KindredButtonContext into 2 contexts | 2h | |
-| Add rate limiting middleware | 2h | |
-| Validate origin header on POST endpoints | 1h | |
-| Standardize on one modal library | 2-3h | |
-| Remove public key fallbacks in API routes | 1h | |
-
-### Large Refactors (~20-30 hours total)
-| Task | Time | Status |
-|------|------|--------|
-| Split NftTableList.js (542 lines) | 6-8h | |
-| Split KindredSpiritsList.js (414 lines) | 4-6h | |
-| Move Alchemy client-side calls to API routes | 8-12h | |
-| Add TypeScript to critical paths | 4-6h | |
-
-### Major Investment (~20+ hours)
-| Task | Time | Status |
-|------|------|--------|
-| Add test framework + initial coverage | 8-12h | |
-| Comprehensive E2E tests | 12-16h | |
-
 ### Summary
+
 | Category | Hours | Priority |
 |----------|-------|----------|
-| Quick wins | 3h | Do now |
-| Security hardening | 6h | High |
-| Component refactoring | 12-16h | Medium |
-| Full test coverage | 20-28h | Low |
+| Remaining quick wins | 2-3h | Do now |
+| Security hardening | 12-15h | High |
+| Component refactoring | 14-19h | Medium |
+| TypeScript + unit tests | 12-18h | Medium |
+| E2E tests | 12-16h | Low |
 
-**Minimum viable improvements** (security + quick wins): ~8-10 hours
-**Production-ready state**: 25-35 hours
+**Total remaining work**: 52-71 hours
+**Minimum viable** (quick wins + security): ~15-18 hours
+**Production-ready** (+ refactoring + unit tests): ~40-55 hours
 
 ## API Client Quality
 

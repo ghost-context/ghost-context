@@ -19,9 +19,11 @@ npm run lint         # Run ESLint
 
 ## Code Metrics
 
-- Files: 37 | Lines: 5,969 (4,929 code, 341 comments)
+- Files: 40 | Lines: ~6,200
 - Functions: 76 (avg 34 lines)
 - Complexity flags: 2 large files, 15+ long functions
+
+See [docs/tech-review.md](docs/tech-review.md) for detailed analysis and improvement plans.
 
 ## Architecture
 
@@ -100,6 +102,16 @@ The app analyzes three distinct asset types, each with its own data source:
 - **POAPs**: Event-based collectibles via POAP API, paginated at 500 per page
 - **ERC-20 Tokens**: Token holder data via Moralis API (Base network)
 
+## Shared Utilities
+
+Located in `src/app/lib/`:
+
+| File | Purpose |
+|------|---------|
+| `concurrency.js` | `processWithConcurrency()` - parallel processing with limit |
+| `validation.js` | Address/ENS/eventId validation for API routes |
+| `address-utils.js` | `shortenAddress()` formatting utility |
+
 ## Known Issues & Technical Debt
 
 ### Complexity Hotspots
@@ -107,21 +119,24 @@ The app analyzes three distinct asset types, each with its own data source:
 - `src/app/components/KindredSpiritsList.js` (414 lines) - needs splitting
 - `src/app/test-common-assets/page.js` (1953 lines) - debug page, low priority
 
-### Code Duplication
-- `processWithConcurrency()` duplicated in 3 files - extract to shared utility
-- Fetch error handling repeated 6+ times - needs shared utility
-- Address formatting logic duplicated in Address.js and SocialCard.js
-
 ### Security Notes
 - NEXT_PUBLIC keys are exposed in browser bundle (Alchemy, Neynar, Airstack)
-- API routes validate address presence but not format (no regex for 0x address)
 - No rate limiting on API routes - relies on upstream API limits
-- Debug param (`?debug=1`) exposes raw API responses in some routes
+- ~~API routes validate address presence but not format~~ ✅ Fixed - validation.js
+- ~~Debug param exposes raw API responses~~ ✅ Fixed - restricted to non-production
 
 ### Missing
 - No tests (no test framework configured)
 - No TypeScript (all vanilla JS)
 - No error boundary component
+
+### Improvement Plans
+See `docs/plans/` for detailed implementation designs:
+- `quick-wins-design.md` - Remaining small fixes (~2-3h)
+- `security-hardening-design.md` - API key protection, rate limiting (~12-15h)
+- `component-refactoring-design.md` - Split large components (~14-19h)
+- `typescript-unit-tests-design.md` - TS + Jest setup (~12-18h)
+- `e2e-tests-design.md` - Playwright E2E tests (~12-16h)
 
 ## Testing
 
