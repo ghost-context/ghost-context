@@ -138,6 +138,20 @@ Detailed design documents are available in `docs/plans/`:
 **Minimum viable** (quick wins + security): ~15-18 hours
 **Production-ready** (+ refactoring + unit tests): ~40-55 hours
 
+## Future Performance Optimizations
+
+These are additional optimizations not covered in the main implementation plans:
+
+| Optimization | Effort | Impact | Description |
+|--------------|--------|--------|-------------|
+| Top-K algorithm | 2-3h | 70% less memory | Use min-heap to track only top 100 results instead of storing all overlaps |
+| DataLoader pattern | 3-4h | 40-60% fewer API calls | Batch and dedupe API requests within event loop tick |
+| Redis/KV caching | 3-4h | 70% fewer repeated calls | Persistent cache for owner counts (1h TTL), social profiles (1h), POAP data (5m) |
+| Streaming responses | 3-4h | Better UX | Stream partial results for long analyses instead of waiting for completion |
+| Adaptive rate limiting | 2-3h | Graceful degradation | Exponential backoff with jitter when hitting API limits |
+
+**Critical issue:** `analyze-combined-overlap/route.js` stores full asset objects for every wallet in `overlapMap`. With 5 collections x 150k holders = 750k+ entries, causing 500MB+ memory usage. The Top-K algorithm would reduce this to O(100) instead of O(n).
+
 ## API Client Quality
 
 | Client | Lines | Pattern | Quality | Notes |

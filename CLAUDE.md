@@ -144,6 +144,18 @@ See `docs/plans/` for detailed implementation designs:
 - Run `npm run build` to verify compilation
 - Run `npm run lint` to check for ESLint issues
 
+## Performance History
+
+Previous optimization work (already implemented):
+
+| Phase | Changes | Impact |
+|-------|---------|--------|
+| Quick Wins | Memoized context values, removed debug logging, useMemo for filtering | Reduced unnecessary re-renders |
+| Parallelization | `processWithConcurrency()` for collection fetching, batch social lookups | Analysis: 2-5min → 30-60s |
+| Server-Side | Parallel NFT/POAP/ERC-20 fetching in analyze-combined-overlap | 60s → 10-20s, prevents Vercel timeout |
+| N+1 Fix | Batched owner count fetching (3 concurrent) | Eliminated Alchemy 429 rate limit errors |
+| Caching | POAP routes use 5-minute cache (`next: { revalidate: 300 }`) | Fewer repeated API calls |
+
 ## Deployment
 
 - **Vercel**: Deploys from `sloan-updates` branch
