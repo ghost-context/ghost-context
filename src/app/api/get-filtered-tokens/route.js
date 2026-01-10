@@ -1,6 +1,9 @@
 // Step 1: Fetch and filter ERC-20 tokens by holder count (without analyzing overlap)
 import { MoralisConfig } from '../../moralis-config.js';
 
+// Tell Next.js this route is always dynamic (uses request.url)
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   console.log('\n\n========================================');
   console.log('🚀 NEW REQUEST: get-filtered-tokens API');

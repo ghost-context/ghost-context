@@ -1,5 +1,9 @@
 // Fast endpoint: Just fetch tokens WITHOUT holder count filtering
 // Used for common assets analysis where we only need token addresses, not filtering
+
+// Tell Next.js this route is always dynamic (uses request.url)
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
