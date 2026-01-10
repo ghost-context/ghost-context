@@ -2,6 +2,7 @@ import { useEffect, useState, useContext, useRef } from "react";
 import { Network } from "alchemy-sdk";
 import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { NeynarClient } from '../neynar';
+import { processWithConcurrency } from '../lib/concurrency';
 
 import NftModal from "./NftModal";
 import { saveAs } from 'file-saver';
@@ -21,27 +22,6 @@ const viemClient = createPublicClient({
 
 const alchemy = new AlchemyMultichainClient();
 const airstack = new NeynarClient();
-
-// Concurrent pool helper - processes items with limited concurrency
-async function processWithConcurrency(items, concurrency, processor) {
-  const results = [];
-  const executing = new Set();
-
-  for (const item of items) {
-    const promise = processor(item).then(result => {
-      executing.delete(promise);
-      return result;
-    });
-    executing.add(promise);
-    results.push(promise);
-
-    if (executing.size >= concurrency) {
-      await Promise.race(executing);
-    }
-  }
-
-  return Promise.all(results);
-}
 
 Modal.setAppElement('#root');
 

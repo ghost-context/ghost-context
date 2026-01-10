@@ -1,27 +1,8 @@
 // Analyze ERC-20 token overlap to find kindred spirits
 // Accepts a list of token addresses to analyze
 import { MoralisConfig } from '../../moralis-config.js';
-
-// Concurrent pool helper - processes items with limited concurrency
-async function processWithConcurrency(items, concurrency, processor) {
-  const results = [];
-  const executing = new Set();
-
-  for (const item of items) {
-    const promise = processor(item).then(result => {
-      executing.delete(promise);
-      return result;
-    });
-    executing.add(promise);
-    results.push(promise);
-
-    if (executing.size >= concurrency) {
-      await Promise.race(executing);
-    }
-  }
-
-  return Promise.all(results);
-}
+import { processWithConcurrency } from '../../lib/concurrency.js';
+import { validateAddressParam } from '../../lib/validation.js';
 
 export async function POST(request) {
   try {
@@ -29,12 +10,9 @@ export async function POST(request) {
     const address = (body.address || '').trim().toLowerCase();
     const tokenAddresses = body.tokens || []; // Array of token addresses to analyze
 
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
 
     if (!tokenAddresses || tokenAddresses.length === 0) {
       return new Response(

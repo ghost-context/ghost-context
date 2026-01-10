@@ -1,5 +1,6 @@
 // Step 1: Fetch and filter ERC-20 tokens by holder count (without analyzing overlap)
 import { MoralisConfig } from '../../moralis-config.js';
+import { validateAddressParam } from '../../lib/validation.js';
 
 // Tell Next.js this route is always dynamic (uses request.url)
 export const dynamic = 'force-dynamic';
@@ -8,17 +9,14 @@ export async function GET(request) {
   console.log('\n\n========================================');
   console.log('🚀 NEW REQUEST: get-filtered-tokens API');
   console.log('========================================\n');
-  
+
   try {
     const { searchParams } = new URL(request.url);
     const address = (searchParams.get('address') || '').trim().toLowerCase();
-    
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
+
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
 
     const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
     if (!apiKey) {

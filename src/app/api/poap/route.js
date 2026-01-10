@@ -1,14 +1,18 @@
+import { validateAddressParam } from '../../lib/validation.js';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const raw = (searchParams.get('address') || '').trim();
     const dropIdParam = (searchParams.get('dropId') || '').trim();
-    const debug = searchParams.get('debug') === '1';
-    if (!raw) {
-      return new Response(JSON.stringify({ error: 'Missing query param: address' }), { status: 400 });
-    }
+    // Only allow debug param in non-production
+    const debug = process.env.NODE_ENV !== 'production' && searchParams.get('debug') === '1';
 
     const address = raw.toLowerCase();
+
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
     const dropId = dropIdParam ? Number(dropIdParam) : undefined;
 
     const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';

@@ -1,11 +1,22 @@
+import { isValidEventId } from '../../../lib/validation.js';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = (searchParams.get('id') || '').trim();
     const pageParam = (searchParams.get('page') || '').trim();
     const countOnly = searchParams.get('countOnly') === '1';
+
     if (!id) {
       return new Response(JSON.stringify({ error: 'Missing query param: id' }), { status: 400 });
+    }
+
+    // Validate event ID is numeric
+    if (!isValidEventId(id)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid event ID format. Expected numeric ID.' }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
     }
 
     const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';
@@ -21,7 +32,8 @@ export async function GET(request) {
     // However, older integrations used `/event/{id}/token-holders` which now returns 403 "Missing Authentication Token".
     // Implement a resilient fetch that tries the legacy endpoint first, then falls back to the new one, and parses both shapes.
     const headers = { 'accept': 'application/json', 'x-api-key': apiKey };
-    const debug = searchParams.get('debug') === '1';
+    // Only allow debug param in non-production
+    const debug = process.env.NODE_ENV !== 'production' && searchParams.get('debug') === '1';
     const LEGACY_LIMIT = 500; // for /token-holders (older endpoint)
     const POAPS_LIMIT = 300;  // for /poaps (per docs, max 300)
 

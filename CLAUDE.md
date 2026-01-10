@@ -15,7 +15,13 @@ npm run build        # Build for production
 npm run lint         # Run ESLint
 ```
 
-**Node.js Requirement**: v22.x or higher
+**Node.js Requirement**: v22.x
+
+## Code Metrics
+
+- Files: 37 | Lines: 5,969 (4,929 code, 341 comments)
+- Functions: 76 (avg 34 lines)
+- Complexity flags: 2 large files, 15+ long functions
 
 ## Architecture
 
@@ -30,7 +36,7 @@ npm run lint         # Run ESLint
 - Airstack for social graph queries
 
 ### Supported Networks
-- **Alchemy**: Ethereum, Polygon, Arbitrum, Optimism, Base (Zora if SDK supports)
+- **Alchemy**: Ethereum, Polygon, Arbitrum, Optimism, Base
 - **POAP**: Treated as pseudo-network for event collections
 - **Moralis ERC-20**: Base network for token holder data
 
@@ -76,9 +82,9 @@ NEXT_PUBLIC_MATIC_MAIN_API_KEY  # Alchemy - Polygon
 NEXT_PUBLIC_ARB_MAIN_API_KEY    # Alchemy - Arbitrum
 NEXT_PUBLIC_OPT_MAIN_API_KEY    # Alchemy - Optimism
 NEXT_PUBLIC_BASE_MAIN_API_KEY   # Alchemy - Base
-MORALIS_API_KEY                 # Moralis API for ERC-20 data
+MORALIS_API_KEY                 # Moralis API for ERC-20 data (server-side)
 MORALIS_PLAN                    # 'free' or 'starter' (affects rate limits)
-POAP_API_KEY                    # POAP API access
+POAP_API_KEY                    # POAP API access (server-side)
 NEXT_PUBLIC_NEYNAR_API_KEY      # Neynar API for Farcaster data
 NEXT_PUBLIC_AIRSTACK_KEY        # Airstack API for social graph queries
 ```
@@ -94,6 +100,37 @@ The app analyzes three distinct asset types, each with its own data source:
 - **POAPs**: Event-based collectibles via POAP API, paginated at 500 per page
 - **ERC-20 Tokens**: Token holder data via Moralis API (Base network)
 
-### Testing
+## Known Issues & Technical Debt
+
+### Complexity Hotspots
+- `src/app/components/NftTableList.js` (542 lines) - needs splitting
+- `src/app/components/KindredSpiritsList.js` (414 lines) - needs splitting
+- `src/app/test-common-assets/page.js` (1953 lines) - debug page, low priority
+
+### Code Duplication
+- `processWithConcurrency()` duplicated in 3 files - extract to shared utility
+- Fetch error handling repeated 6+ times - needs shared utility
+- Address formatting logic duplicated in Address.js and SocialCard.js
+
+### Security Notes
+- NEXT_PUBLIC keys are exposed in browser bundle (Alchemy, Neynar, Airstack)
+- API routes validate address presence but not format (no regex for 0x address)
+- No rate limiting on API routes - relies on upstream API limits
+- Debug param (`?debug=1`) exposes raw API responses in some routes
+
+### Missing
+- No tests (no test framework configured)
+- No TypeScript (all vanilla JS)
+- No error boundary component
+
+## Testing
 
 - `/test-common-assets` - Debug page for testing the common assets finder feature
+- Run `npm run build` to verify compilation
+- Run `npm run lint` to check for ESLint issues
+
+## Deployment
+
+- **Vercel**: Deploys from `sloan-updates` branch
+- **Docker**: `Dockerfile` configured for standalone Next.js output
+- **Cloud Run**: `bitbucket-pipelines.yml` for GCP deployment

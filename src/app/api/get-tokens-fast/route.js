@@ -1,5 +1,6 @@
 // Fast endpoint: Just fetch tokens WITHOUT holder count filtering
 // Used for common assets analysis where we only need token addresses, not filtering
+import { validateAddressParam } from '../../lib/validation.js';
 
 // Tell Next.js this route is always dynamic (uses request.url)
 export const dynamic = 'force-dynamic';
@@ -8,13 +9,10 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const address = (searchParams.get('address') || '').trim().toLowerCase();
-    
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
+
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
 
     const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
     if (!apiKey) {

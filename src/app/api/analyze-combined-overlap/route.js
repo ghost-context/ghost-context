@@ -1,27 +1,8 @@
 // 🎯 Unified Kindred Spirit Analysis
 // Combines NFT collections, POAP events, and ERC-20 tokens
 import { MoralisConfig } from '../../moralis-config.js';
-
-// Concurrent pool helper - processes items with limited concurrency
-async function processWithConcurrency(items, concurrency, processor) {
-  const results = [];
-  const executing = new Set();
-
-  for (const item of items) {
-    const promise = processor(item).then(result => {
-      executing.delete(promise);
-      return result;
-    });
-    executing.add(promise);
-    results.push(promise);
-
-    if (executing.size >= concurrency) {
-      await Promise.race(executing);
-    }
-  }
-
-  return Promise.all(results);
-}
+import { processWithConcurrency } from '../../lib/concurrency.js';
+import { validateAddressParam } from '../../lib/validation.js';
 
 export async function POST(request) {
   try {
@@ -31,12 +12,9 @@ export async function POST(request) {
     const selectedPOAPs = body.poaps || [];
     const selectedERC20s = body.erc20s || [];
 
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
 
     const totalAssets = selectedNFTs.length + selectedPOAPs.length + selectedERC20s.length;
     if (totalAssets === 0) {
