@@ -4,16 +4,20 @@ import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { NeynarClient } from '../neynar';
 
 import NftModal from "./NftModal";
-import { useEnsName } from "wagmi";
-import { ethers } from "ethers";
 import { saveAs } from 'file-saver';
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
 import { useAccount } from 'wagmi';
 import Modal from 'react-modal';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { SocialCard } from './SocialCard'
 
-const provider = ethers.getDefaultProvider();
+// Viem client for ENS lookups
+const viemClient = createPublicClient({
+  chain: mainnet,
+  transport: http(),
+});
 
 const alchemy = new AlchemyMultichainClient();
 const airstack = new NeynarClient();
@@ -127,7 +131,7 @@ const KindredSpiritsList = () => {
       // Try to resolve the ENS name for the address. If it doesn't exist, use the original address.
       let ensName = address;
       try {
-        ensName = await provider.lookupAddress(address) || address;
+        ensName = await viemClient.getEnsName({ address }) || address;
       } catch (error) {
         console.error(`No ENS name found for address: ${address}`);
       }
