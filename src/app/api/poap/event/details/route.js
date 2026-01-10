@@ -1,39 +1,29 @@
+import { fetchJson } from '../../../../lib/fetch-utils.js';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = (searchParams.get('id') || '').trim();
     if (!id) {
-      return new Response(JSON.stringify({ error: 'Missing query param: id' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing query param: id' }), { status: 400, headers: { 'content-type': 'application/json' } });
     }
 
-    const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';
+    const apiKey = process.env.POAP_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Missing POAP_API_KEY in environment' }),
-        { status: 500 }
+        { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
 
     const headers = { 'accept': 'application/json', 'x-api-key': apiKey };
     // Per docs: https://documentation.poap.tech/reference/get_poap_event_by_id
     const url = `https://api.poap.tech/events/id/${encodeURIComponent(id)}`;
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[POAP Event Details] request', { id, url });
-    }
-    const res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
-    if (!res.ok) {
-      let bodyText = '';
-      try { bodyText = await res.text(); } catch { bodyText = ''; }
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[POAP Event Details] failure', { status: res.status, id, body: bodyText });
-      }
-      return new Response(
-        JSON.stringify({ error: 'Lookup failed', id, status: res.status, body: bodyText }),
-        { status: res.status || 502, headers: { 'content-type': 'application/json' } }
-      );
-    }
 
-    const ev = await res.json();
+    const result = await fetchJson(url, { headers, next: { revalidate: 300 } }, { name: 'POAP Event Details', identifier: id });
+    if (!result.ok) return result.error;
+
+    const ev = result.data;
     const payload = {
       id: ev?.id ?? null,
       name: ev?.name ?? '',
@@ -48,8 +38,11 @@ export async function GET(request) {
     };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[POAP Event Details] error', e);
+    }
     return new Response(
-      JSON.stringify({ error: 'Unhandled error', message: e?.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }

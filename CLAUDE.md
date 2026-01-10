@@ -111,6 +111,7 @@ Located in `src/app/lib/`:
 | `concurrency.js` | `processWithConcurrency()` - parallel processing with limit |
 | `validation.js` | Address/ENS/eventId validation for API routes |
 | `address-utils.js` | `shortenAddress()` formatting utility |
+| `fetch-utils.js` | `fetchJson()` - standardized fetch with error handling |
 
 ## Known Issues & Technical Debt
 

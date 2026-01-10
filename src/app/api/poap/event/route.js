@@ -19,11 +19,11 @@ export async function GET(request) {
       );
     }
 
-    const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';
+    const apiKey = process.env.POAP_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Missing POAP_API_KEY in environment' }),
-        { status: 500 }
+        { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
 
@@ -183,7 +183,7 @@ export async function GET(request) {
     const result = await fetchPage(page, 'legacy');
     if (!result.ok) {
       return new Response(
-        JSON.stringify({ error: 'Lookup failed', id, status: result.status || 502, body: result.body || '' }),
+        JSON.stringify({ error: 'Lookup failed' }),
         { status: result.status || 502, headers: { 'content-type': 'application/json' } }
       );
     }
@@ -192,8 +192,11 @@ export async function GET(request) {
     const payload = debug ? { id, holders: unique, debug: { usedLimit: result.usedLimit, sampleRaw: Array.isArray(result.raw) ? result.raw.slice(0, 2) : (Array.isArray(result.raw?.poaps) ? result.raw.poaps.slice(0, 2) : (Array.isArray(result.raw?.items) ? result.raw.items.slice(0, 2) : (Array.isArray(result.raw?.tokenHolders) ? result.raw.tokenHolders.slice(0, 2) : result.raw))) } } : { id, holders: unique };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[POAP Event Holders] error', e);
+    }
     return new Response(
-      JSON.stringify({ error: 'Unhandled error', message: e?.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }

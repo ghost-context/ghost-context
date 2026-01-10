@@ -14,10 +14,10 @@ export async function GET(request) {
     const validationError = validateAddressParam(address);
     if (validationError) return validationError;
 
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const apiKey = process.env.MORALIS_API_KEY;
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'Moralis API key not configured' }),
+        JSON.stringify({ error: 'Missing MORALIS_API_KEY in environment' }),
         { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
@@ -80,9 +80,11 @@ export async function GET(request) {
     );
 
   } catch (error) {
-    console.error('[Fast Tokens] Error:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[Fast Tokens] error', error);
+    }
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
