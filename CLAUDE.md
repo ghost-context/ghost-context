@@ -132,13 +132,13 @@ Located in `src/app/lib/`:
 - No error boundary component
 
 ### Improvement Plans
-See `docs/plans/` for detailed implementation designs:
-- `quick-wins-design.md` - Remaining small fixes (~2-3h)
-- `security-hardening-design.md` - API key protection, rate limiting (~12-15h)
-- `component-refactoring-design.md` - Split large components (~14-19h)
-- `typescript-unit-tests-design.md` - TS + Jest setup (~12-18h)
-- `performance-optimizations-design.md` - Memory, caching, streaming (~14-17h)
-- `e2e-tests-design.md` - Playwright E2E tests (~12-16h)
+See `docs/plans/` for detailed implementation designs (in recommended order):
+1. `quick-wins-design.md` - ✅ Done
+2. `performance-optimizations-design.md` - Memory, caching, streaming (~14-17h)
+3. `security-hardening-design.md` - API key protection, rate limiting (~12-15h)
+4. `component-refactoring-design.md` - Split large components (~14-19h)
+5. `typescript-unit-tests-design.md` - TS + Jest setup (~12-18h)
+6. `e2e-tests-design.md` - Playwright E2E tests (~12-16h)
 
 ## Testing
 

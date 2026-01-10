@@ -110,11 +110,11 @@ Detailed design documents are available in `docs/plans/`:
 | Plan | Hours | Description | Status |
 |------|-------|-------------|--------|
 | [Quick Wins](plans/2026-01-09-quick-wins-design.md) | 2-3h | fetchJson utility, error message audit, key fallback removal | ✅ Done |
+| [Performance Optimizations](plans/2026-01-09-performance-optimizations-design.md) | 14-17h | Top-K algorithm, DataLoader, Redis caching, streaming, retry logic | ⏳ Next |
 | [Security Hardening](plans/2026-01-09-security-hardening-design.md) | 12-15h | Move Alchemy to server, rate limiting, CSRF protection | ⏳ Pending |
 | [Component Refactoring](plans/2026-01-09-component-refactoring-design.md) | 14-19h | Split large components, extract hooks, consolidate modals | ⏳ Pending |
 | [TypeScript + Unit Tests](plans/2026-01-09-typescript-unit-tests-design.md) | 12-18h | TS migration, Jest setup, utility & hook tests | ⏳ Pending |
 | [E2E Tests](plans/2026-01-09-e2e-tests-design.md) | 12-16h | Playwright setup, critical flow tests, CI integration | ⏳ Pending |
-| [Performance Optimizations](plans/2026-01-09-performance-optimizations-design.md) | 14-17h | Top-K algorithm, DataLoader, Redis caching, streaming, retry logic | ⏳ Pending |
 
 ### Completed Quick Wins (2026-01-09)
 
@@ -127,19 +127,19 @@ Detailed design documents are available in `docs/plans/`:
 
 ### Summary
 
-| Category | Hours | Priority | Status |
-|----------|-------|----------|--------|
-| Quick wins | 2-3h | - | ✅ Done |
-| Security hardening | 12-15h | High | ⏳ Next |
-| Component refactoring | 14-19h | Medium | ⏳ Pending |
-| TypeScript + unit tests | 12-18h | Medium | ⏳ Pending |
-| Performance optimizations | 14-17h | Medium | ⏳ Pending |
-| E2E tests | 12-16h | Low | ⏳ Pending |
+| # | Category | Hours | Status |
+|---|----------|-------|--------|
+| 1 | Quick wins | 2-3h | ✅ Done |
+| 2 | Performance optimizations | 14-17h | ⏳ Next |
+| 3 | Security hardening | 12-15h | ⏳ Pending |
+| 4 | Component refactoring | 14-19h | ⏳ Pending |
+| 5 | TypeScript + unit tests | 12-18h | ⏳ Pending |
+| 6 | E2E tests | 12-16h | ⏳ Pending |
 
 **Total remaining work**: 64-85 hours
-**Minimum viable** (security): ~12-15 hours
-**Production-ready** (+ refactoring + unit tests): ~38-52 hours
-**Fully optimized** (+ performance + E2E): ~64-85 hours
+**Phase 2 (performance)**: ~14-17 hours - immediate UX improvements
+**Phase 3 (security)**: ~12-15 hours - API key protection
+**Production-ready (+ refactoring + tests)**: ~64-85 hours
 
 ## API Client Quality
 
