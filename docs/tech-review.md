@@ -114,6 +114,7 @@ Detailed design documents are available in `docs/plans/`:
 | [Component Refactoring](plans/2026-01-09-component-refactoring-design.md) | 14-19h | Split large components, extract hooks, consolidate modals | ⏳ Pending |
 | [TypeScript + Unit Tests](plans/2026-01-09-typescript-unit-tests-design.md) | 12-18h | TS migration, Jest setup, utility & hook tests | ⏳ Pending |
 | [E2E Tests](plans/2026-01-09-e2e-tests-design.md) | 12-16h | Playwright setup, critical flow tests, CI integration | ⏳ Pending |
+| [Performance Optimizations](plans/2026-01-09-performance-optimizations-design.md) | 14-17h | Top-K algorithm, DataLoader, Redis caching, streaming, retry logic | ⏳ Pending |
 
 ### Completed Quick Wins (2026-01-09)
 
@@ -132,25 +133,13 @@ Detailed design documents are available in `docs/plans/`:
 | Security hardening | 12-15h | High |
 | Component refactoring | 14-19h | Medium |
 | TypeScript + unit tests | 12-18h | Medium |
+| Performance optimizations | 14-17h | Medium |
 | E2E tests | 12-16h | Low |
 
-**Total remaining work**: 52-71 hours
+**Total remaining work**: 66-88 hours
 **Minimum viable** (quick wins + security): ~15-18 hours
 **Production-ready** (+ refactoring + unit tests): ~40-55 hours
-
-## Future Performance Optimizations
-
-These are additional optimizations not covered in the main implementation plans:
-
-| Optimization | Effort | Impact | Description |
-|--------------|--------|--------|-------------|
-| Top-K algorithm | 2-3h | 70% less memory | Use min-heap to track only top 100 results instead of storing all overlaps |
-| DataLoader pattern | 3-4h | 40-60% fewer API calls | Batch and dedupe API requests within event loop tick |
-| Redis/KV caching | 3-4h | 70% fewer repeated calls | Persistent cache for owner counts (1h TTL), social profiles (1h), POAP data (5m) |
-| Streaming responses | 3-4h | Better UX | Stream partial results for long analyses instead of waiting for completion |
-| Adaptive rate limiting | 2-3h | Graceful degradation | Exponential backoff with jitter when hitting API limits |
-
-**Critical issue:** `analyze-combined-overlap/route.js` stores full asset objects for every wallet in `overlapMap`. With 5 collections x 150k holders = 750k+ entries, causing 500MB+ memory usage. The Top-K algorithm would reduce this to O(100) instead of O(n).
+**Fully optimized** (+ performance + E2E): ~66-88 hours
 
 ## API Client Quality
 

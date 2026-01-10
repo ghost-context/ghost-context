@@ -136,6 +136,7 @@ See `docs/plans/` for detailed implementation designs:
 - `security-hardening-design.md` - API key protection, rate limiting (~12-15h)
 - `component-refactoring-design.md` - Split large components (~14-19h)
 - `typescript-unit-tests-design.md` - TS + Jest setup (~12-18h)
+- `performance-optimizations-design.md` - Memory, caching, streaming (~14-17h)
 - `e2e-tests-design.md` - Playwright E2E tests (~12-16h)
 
 ## Testing
