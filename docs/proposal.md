@@ -6,13 +6,13 @@
 
 Ghost Context is a functional Web3 wallet discovery app that successfully integrates 5+ external APIs. Following a technical review, we've identified improvements across performance, security, maintainability, and code quality. These changes will make the app faster, more secure, and easier to maintain.
 
-**Estimated effort:** 10-20 hours (collaborative implementation)
+**Estimated effort:** ~10 hours, 4 chunks
 
 ---
 
 ## Proposed Improvements
 
-### 1. Performance Optimizations (~3-4h)
+### 1. Performance Optimizations
 
 **What:** Implement Top-K algorithm for holder analysis, add DataLoader pattern for batching, introduce caching layer, and add retry logic for flaky API calls.
 
@@ -22,7 +22,7 @@ Ghost Context is a functional Web3 wallet discovery app that successfully integr
 - **Better reliability** — Retry logic handles transient failures from Alchemy, POAP, and Moralis APIs
 - **Reduced latency** — Caching prevents redundant fetches for the same data within a session
 
-### 2. Security Hardening (~3-4h)
+### 2. Security Hardening
 
 **What:** Move Alchemy SDK calls to server-side API routes, add rate limiting middleware, and implement CSRF protection on POST endpoints.
 
@@ -31,7 +31,7 @@ Ghost Context is a functional Web3 wallet discovery app that successfully integr
 - **DoS protection** — Rate limiting prevents abuse of API routes
 - **Request validation** — CSRF protection ensures requests originate from the app
 
-### 3. Component Refactoring (~3-4h)
+### 3. Component Refactoring
 
 **What:** Split NftTableList (542 lines) and KindredSpiritsList (414 lines) into smaller, focused components. Extract custom hooks for collection fetching, owner counts, and analysis logic.
 
@@ -41,7 +41,7 @@ Ghost Context is a functional Web3 wallet discovery app that successfully integr
 - **Improved testing** — Isolated logic is simpler to unit test
 - **Faster development** — Clear component boundaries reduce cognitive load
 
-### 4. TypeScript + Unit Tests (~3-4h)
+### 4. TypeScript + Unit Tests
 
 **What:** Migrate codebase to TypeScript, set up Jest, and add tests for utilities and hooks.
 
@@ -55,7 +55,7 @@ Ghost Context is a functional Web3 wallet discovery app that successfully integr
 
 ## What We're Deferring
 
-**E2E Tests** (12-16h) — Playwright setup and critical flow tests. While valuable for catching integration issues, the ROI is lower for an app at this stage. Can be added later when the codebase is more stable.
+**E2E Tests** (??) — Playwright setup and critical flow tests. While valuable for catching integration issues, the ROI is lower for an app at this stage. Can be added later when the codebase is more stable.
 
 ---
 
