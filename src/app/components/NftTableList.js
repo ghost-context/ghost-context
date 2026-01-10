@@ -8,6 +8,8 @@ import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 
 import Modal from 'react-modal';
 
+// Create alchemy client once at module level (not per render)
+const alchemy = new AlchemyMultichainClient();
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -43,7 +45,6 @@ export default function NftTableList() {
     setShowKindredSpirits,
   } = useContext(KindredButtonContext);
 
-  const alchemy = new AlchemyMultichainClient();
   const [latestInboundByContract, setLatestInboundByContract] = useState({});
   const inboundCacheRef = useRef(new Map()); // session cache: contract -> ISO timestamp
   const inboundFetchPendingRef = useRef(false);
@@ -153,7 +154,7 @@ export default function NftTableList() {
       checkbox.current.indeterminate = isIndeterminate;
     }
     setSelectedCollectionsContext(selectedCollections)
-  }, [selectedCollections, collections.length]);
+  }, [selectedCollections, collections.length, setSelectedCollectionsContext]);
 
 
   function toggleAll() {

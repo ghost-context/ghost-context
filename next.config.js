@@ -23,17 +23,11 @@ const nextConfig = {
       crypto: false,
     };
     
-    // Ignore react-native modules on the server
-    if (!isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@react-native-async-storage/async-storage': false,
-      };
-    }
-    
-    // Ignore indexedDB errors on server
+    // Ignore react-native modules (MetaMask SDK tries to import these)
     config.resolve.alias = {
       ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': false,
+      'react-native': false,
       'idb-keyval': isServer ? false : 'idb-keyval',
     };
     

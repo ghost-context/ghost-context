@@ -320,7 +320,7 @@ const KindredSpiritsList = () => {
       setTriggerKindredSpirits(false); // Reset the trigger after using it
     }
 
-  }, [triggerKindredSpirits, ensAddress, address, selectedCollectionsContext]);
+  }, [triggerKindredSpirits, ensAddress, address, selectedCollectionsContext, setSelectedCollectionsContext, setTriggerKindredSpirits]);
 
 
   useEffect(() => {

@@ -25,7 +25,7 @@ export const SocialCard = memo(function SocialCard({ airstack, count, address, i
       };
 
       fetchSocials();
-    }, [address, prefetchedSocials]);
+    }, [address, prefetchedSocials, airstack]);
     return (
     <div className="flex items-center gap-x-3">
       <img
