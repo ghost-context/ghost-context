@@ -104,9 +104,8 @@ export async function GET(request) {
       }
       let bodyText = '';
       try { bodyText = await res.text(); } catch { bodyText = ''; }
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[POAP Event Holders] failure', { status: res.status, id, body: bodyText });
-      }
+      // Always log failures - Vercel captures these logs
+      console.warn('[POAP Event Holders] failure', { status: res.status, id, body: bodyText.slice(0, 500) });
       // If 403/404 on legacy, fall back to poaps path
       const secondLimit = second === legacyBase ? LEGACY_LIMIT : POAPS_LIMIT;
       url = buildUrl(second, pageNum, secondLimit);
@@ -117,9 +116,8 @@ export async function GET(request) {
       if (!res.ok) {
         let bodyText2 = '';
         try { bodyText2 = await res.text(); } catch { bodyText2 = ''; }
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[POAP Event Holders] fallback failure', { status: res.status, id, body: bodyText2 });
-        }
+        // Always log failures - Vercel captures these logs
+        console.warn('[POAP Event Holders] fallback failure', { status: res.status, id, body: bodyText2.slice(0, 500) });
         return { ok: false, status: res.status, body: bodyText2 };
       }
       const data2 = await res.json();
@@ -192,9 +190,8 @@ export async function GET(request) {
     const payload = debug ? { id, holders: unique, debug: { usedLimit: result.usedLimit, sampleRaw: Array.isArray(result.raw) ? result.raw.slice(0, 2) : (Array.isArray(result.raw?.poaps) ? result.raw.poaps.slice(0, 2) : (Array.isArray(result.raw?.items) ? result.raw.items.slice(0, 2) : (Array.isArray(result.raw?.tokenHolders) ? result.raw.tokenHolders.slice(0, 2) : result.raw))) } } : { id, holders: unique };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[POAP Event Holders] error', e);
-    }
+    // Always log errors - Vercel captures these logs
+    console.error('[POAP Event Holders] error', { message: e.message, stack: e.stack?.slice(0, 500) });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }

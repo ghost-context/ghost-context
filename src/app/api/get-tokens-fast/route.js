@@ -80,9 +80,8 @@ export async function GET(request) {
     );
 
   } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[Fast Tokens] error', error);
-    }
+    // Always log errors - Vercel captures these logs
+    console.error('[Fast Tokens] error', { message: error.message, stack: error.stack?.slice(0, 500) });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }

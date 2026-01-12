@@ -65,9 +65,8 @@ export async function GET(request) {
     const payload = debug ? { address, socials, raw: data } : { address, socials };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[Farcaster API] error', e);
-    }
+    // Always log errors - Vercel captures these logs
+    console.error('[Farcaster API] error', { message: e.message, stack: e.stack?.slice(0, 500) });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }

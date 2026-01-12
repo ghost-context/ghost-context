@@ -38,9 +38,8 @@ export async function GET(request) {
     };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[POAP Event Details] error', e);
-    }
+    // Always log errors - Vercel captures these logs
+    console.error('[POAP Event Details] error', { message: e.message, stack: e.stack?.slice(0, 500) });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }

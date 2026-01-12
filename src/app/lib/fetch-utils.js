@@ -19,9 +19,8 @@ export async function fetchJson(url, options = {}, context = {}) {
       let bodyText = '';
       try { bodyText = await res.text(); } catch { bodyText = ''; }
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn(`[${name}] failure`, { status: res.status, identifier, body: bodyText });
-      }
+      // Always log failures - Vercel captures these logs
+      console.warn(`[${name}] failure`, { status: res.status, identifier, body: bodyText.slice(0, 500) });
 
       return {
         ok: false,
@@ -35,9 +34,8 @@ export async function fetchJson(url, options = {}, context = {}) {
     const data = await res.json();
     return { ok: true, data };
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error(`[${name}] error`, e);
-    }
+    // Always log errors - Vercel captures these logs
+    console.error(`[${name}] error`, { identifier, message: e.message, stack: e.stack?.slice(0, 500) });
     return {
       ok: false,
       error: new Response(
