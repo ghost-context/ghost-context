@@ -39,7 +39,7 @@
       } catch (error) {
         console.error('Error setting address:', error);
       }
-    }, [data, dataAddress, isLoading, isLoadingAddress, isError, addressError]);
+    }, [data, dataAddress, isLoading, isLoadingAddress, isError, addressError, setEnsAddress, setShowKindredSpirits]);
     
 
     const handleSubmit = async (e, ensNameOrAddress) => {

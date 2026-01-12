@@ -1,16 +1,11 @@
 import { useEnsName } from 'wagmi'
 import { isAddress } from 'viem'
+import { shortenAddress } from '../lib/address-utils'
 
 const ShortAddress = ({ address }) => {
-    const prefix = address.slice(0, 4);
-    const suffix = address.slice(-4);
-    const shortAddress = `${prefix}...${suffix}`;
-  
-    return (
-      <div>{shortAddress}</div>
-    )
+    return <div>{shortenAddress(address)}</div>
 }
-  
+
 export const Address = ({ address }) => {
     const enabled = isAddress(address || '');
     const { data, isError, isLoading } = useEnsName({
@@ -18,22 +13,12 @@ export const Address = ({ address }) => {
       chainId: 1,
       query: { enabled }
     });
-  
-    if(!data) {
-      const prefix = address.slice(0, 4);
-      const suffix = address.slice(-4);
-      address = `${prefix}...${suffix}`;
-    }
-  
+
+    const displayAddress = data || shortenAddress(address);
+
     return (
       <>
-        {isLoading ? (
-          address
-        ) : isError ? (
-          address
-        ) : (
-          data || address
-        )}
+        {isLoading ? shortenAddress(address) : isError ? shortenAddress(address) : displayAddress}
       </>
     );
   }

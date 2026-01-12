@@ -1,6 +1,8 @@
 // 🎯 Unified Kindred Spirit Analysis
 // Combines NFT collections, POAP events, and ERC-20 tokens
 import { MoralisConfig } from '../../moralis-config.js';
+import { processWithConcurrency } from '../../lib/concurrency.js';
+import { validateAddressParam } from '../../lib/validation.js';
 
 export async function POST(request) {
   try {
@@ -10,12 +12,9 @@ export async function POST(request) {
     const selectedPOAPs = body.poaps || [];
     const selectedERC20s = body.erc20s || [];
 
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
 
     const totalAssets = selectedNFTs.length + selectedPOAPs.length + selectedERC20s.length;
     if (totalAssets === 0) {
@@ -25,15 +24,14 @@ export async function POST(request) {
       );
     }
 
-
-    // Central overlap tracking
+    // Central overlap tracking (thread-safe via sequential aggregation after parallel fetch)
     const overlapMap = new Map(); // wallet -> { count, assets: { nfts: [], poaps: [], erc20s: [] } }
 
-    // Helper to add overlap
+    // Helper to add overlap (called after parallel fetching completes)
     const addOverlap = (walletAddress, assetInfo, assetType) => {
       // Skip source wallet (compare lowercase addresses)
       if (walletAddress.toLowerCase() === address.toLowerCase()) return;
-      
+
       if (!overlapMap.has(walletAddress)) {
         overlapMap.set(walletAddress, {
           count: 0,
@@ -42,15 +40,15 @@ export async function POST(request) {
       }
 
       const overlap = overlapMap.get(walletAddress);
-      
+
       // Check if this specific asset is already counted
-      const assetKey = assetType === 'nft' ? assetInfo.address : 
-                       assetType === 'poap' ? assetInfo.eventId : 
+      const assetKey = assetType === 'nft' ? assetInfo.address :
+                       assetType === 'poap' ? assetInfo.eventId :
                        assetInfo.address;
-      
+
       const alreadyCounted = overlap.assets[`${assetType}s`].some(a => {
-        const existingKey = assetType === 'nft' ? a.address : 
-                           assetType === 'poap' ? a.eventId : 
+        const existingKey = assetType === 'nft' ? a.address :
+                           assetType === 'poap' ? a.eventId :
                            a.address;
         return existingKey === assetKey;
       });
@@ -62,215 +60,166 @@ export async function POST(request) {
     };
 
     // ========================================
-    // 1. ANALYZE NFT COLLECTIONS (Alchemy)
+    // 1. ANALYZE NFT COLLECTIONS (Alchemy) - PARALLEL
     // ========================================
-    if (selectedNFTs.length > 0) {
-      for (const nft of selectedNFTs) {
-        try {
-          // Import AlchemyMultichainClient dynamically to avoid issues
-          const { AlchemyMultichainClient } = await import('../../alchemy-multichain-client.js');
-          const alchemy = new AlchemyMultichainClient();
-          
-          let owners = [];
-          let pageKey = undefined;
-          let pageCount = 0;
-          
-          do {
-            const resp = await alchemy.forNetwork(nft.network).nft.getOwnersForContract(nft.address, { pageKey });
-            const batch = resp?.owners || [];
-            owners = owners.concat(batch);
-            pageCount++;
-            
-            if (owners.length > 150000) {
-              break;
-            }
-            pageKey = resp?.pageKey;
-          } while (pageKey);
+    const fetchNFTOwners = async (nft) => {
+      try {
+        const { AlchemyMultichainClient } = await import('../../alchemy-multichain-client.js');
+        const alchemy = new AlchemyMultichainClient();
 
-          for (const owner of owners) {
-            // Handle both string and object formats from Alchemy SDK
-            const ownerAddress = typeof owner === 'string' 
-              ? owner 
-              : (owner?.ownerAddress || owner);
-            
-            if (!ownerAddress) {
-              continue;
-            }
-            
-            addOverlap(ownerAddress.toLowerCase(), {
-              address: nft.address,
-              network: nft.network,
-              name: nft.name,
-              type: 'NFT'
-            }, 'nft');
-          }
-        } catch (err) {
-          // Silently skip failed NFTs
-        }
+        let owners = [];
+        let pageKey = undefined;
 
-        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+        do {
+          const resp = await alchemy.forNetwork(nft.network).nft.getOwnersForContract(nft.address, { pageKey });
+          const batch = resp?.owners || [];
+          owners = owners.concat(batch);
+
+          if (owners.length > 150000) break;
+          pageKey = resp?.pageKey;
+        } while (pageKey);
+
+        return { nft, owners };
+      } catch (err) {
+        return { nft, owners: [] };
       }
-    }
+    };
 
     // ========================================
-    // 2. ANALYZE POAP EVENTS
+    // 2. ANALYZE POAP EVENTS - PARALLEL
     // ========================================
-    if (selectedPOAPs.length > 0) {
-      for (const poap of selectedPOAPs) {
-        
-        try {
-          let page = 0;
-          let pageCount = 0;
-          let totalHolders = 0;
+    const fetchPOAPHolders = async (poap) => {
+      try {
+        let page = 0;
+        let pageCount = 0;
+        let totalHolders = 0;
+        let allHolders = [];
 
-          do {
-            const urlBase = typeof window === 'undefined' ? 'http://localhost:3000' : 'http://localhost:3000';
-            const url = new URL('/api/poap/event', urlBase);
-            url.searchParams.set('id', poap.eventId);
-            url.searchParams.set('page', String(page));
+        do {
+          const urlBase = 'http://localhost:3000';
+          const url = new URL('/api/poap/event', urlBase);
+          url.searchParams.set('id', poap.eventId);
+          url.searchParams.set('page', String(page));
 
-            const res = await fetch(url.toString(), { cache: 'no-store' });
-            if (!res.ok) {
-              console.warn(`    ✗ Failed to fetch page ${page}`);
-              break;
-            }
+          const res = await fetch(url.toString(), { next: { revalidate: 300 } });
+          if (!res.ok) break;
 
-            const data = await res.json();
-            const holders = Array.isArray(data?.holders) ? data.holders : [];
-            pageCount = holders.length;
-            totalHolders += holders.length;
+          const data = await res.json();
+          const holders = Array.isArray(data?.holders) ? data.holders : [];
+          pageCount = holders.length;
+          totalHolders += holders.length;
+          allHolders = allHolders.concat(holders);
 
-            for (const holder of holders) {
-              addOverlap(holder.toLowerCase(), {
-                eventId: poap.eventId,
-                name: poap.name,
-                type: 'POAP'
-              }, 'poap');
-            }
+          page += 1;
+          if (totalHolders >= 150000) break;
+        } while (pageCount === 500);
 
-            page += 1;
-            
-            if (totalHolders >= 150000) {
-              break;
-            }
-          } while (pageCount === 500);
-
-        } catch (err) {
-          // Silently skip failed POAPs
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+        return { poap, holders: allHolders };
+      } catch (err) {
+        return { poap, holders: [] };
       }
-    }
+    };
 
     // ========================================
-    // 3. ANALYZE ERC-20 TOKENS (Moralis)
+    // 3. ANALYZE ERC-20 TOKENS (Moralis) - PARALLEL
     // ========================================
-    if (selectedERC20s.length > 0) {
-      console.log(`\n🪙 Analyzing ${selectedERC20s.length} ERC-20 tokens for kindred spirits:`);
-      console.log(`   Tokens:`, selectedERC20s.map(t => `${t.symbol} (${t.address.slice(0,8)}...)`).join(', '));
-      
-      // Log Moralis configuration
-      console.log(`   📋 Moralis Config: Plan=${MoralisConfig.plan}, PageSize=${MoralisConfig.pageSize}, Delay=${MoralisConfig.delayMs}ms`);
-      
-      const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
-      if (!apiKey) {
-        console.log(`   ❌ ERROR: No Moralis API key found!`);
-      }
-      if (apiKey) {
-        const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
-        const chains = ['base', '0x2105']; // Try Base network formats (name first, then hex)
+    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const fetchERC20Owners = async (token) => {
+      if (!apiKey) return { token, owners: [] };
 
-        for (const token of selectedERC20s) {
-          console.log(`\n   📊 Fetching holders for ${token.symbol}...`);
-          
-          let allOwners = [];
-          let successfulChain = null;
-          
-          // Try each chain format until one works
-          for (const chain of chains) {
-            try {
-              console.log(`      🔍 Trying chain format: ${chain} with limit=${MoralisConfig.pageSize}`);
-              let cursor = null;
-              let pageCount = 0;
-              let chainOwners = [];
+      const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
+      const chain = '0x2105'; // Base network
 
-              do {
-                const params = new URLSearchParams({
-                  chain: chain,
-                  limit: String(MoralisConfig.pageSize)
-                });
-                if (cursor) params.set('cursor', cursor);
+      try {
+        let cursor = null;
+        let allOwners = [];
 
-                const response = await fetch(
-                  `${baseUrl}/erc20/${token.address}/owners?${params}`,
-                  {
-                    headers: {
-                      'accept': 'application/json',
-                      'X-API-Key': apiKey
-                    }
-                  }
-                );
+        do {
+          const params = new URLSearchParams({
+            chain: chain,
+            limit: String(MoralisConfig.pageSize)
+          });
+          if (cursor) params.set('cursor', cursor);
 
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  console.log(`      ⚠️  Chain ${chain} failed (${response.status}): ${errorText.substring(0, 100)}`);
-                  break;
-                }
-
-                const data = await response.json();
-                const owners = data.result || [];
-                
-                // If we get data, this chain format works
-                if (pageCount === 0 && owners.length > 0) {
-                  console.log(`      ✅ Chain format ${chain} works!`);
-                  successfulChain = chain;
-                }
-                
-                console.log(`      📄 Page ${pageCount + 1}: ${owners.length} owners fetched`);
-                chainOwners = chainOwners.concat(owners);
-                pageCount++;
-
-                cursor = data.cursor || null;
-
-                if (chainOwners.length > 150000) {
-                  console.log(`      ⚠️  Reached 150k owner limit, stopping pagination`);
-                  break;
-                }
-
-                if (cursor) {
-                  await new Promise(resolve => setTimeout(resolve, MoralisConfig.delayMs));
-                }
-              } while (cursor);
-
-              // If we got owners, use this chain and stop trying others
-              if (chainOwners.length > 0) {
-                allOwners = chainOwners;
-                break;
+          const response = await fetch(
+            `${baseUrl}/erc20/${token.address}/owners?${params}`,
+            {
+              headers: {
+                'accept': 'application/json',
+                'X-API-Key': apiKey
               }
-            } catch (err) {
-              console.log(`      ⚠️  Chain ${chain} error: ${err.message}`);
             }
-          }
+          );
 
-          if (allOwners.length === 0) {
-            console.log(`      ❌ No holders found for ${token.symbol} on any chain format`);
-          } else {
-            console.log(`      ✅ Found ${allOwners.length} holders for ${token.symbol} (chain: ${successfulChain})`);
-            
-            for (const owner of allOwners) {
-              addOverlap(owner.owner_address.toLowerCase(), {
-                address: token.address,
-                symbol: token.symbol,
-                name: token.name,
-                balance: owner.balance_formatted,
-                type: 'ERC-20'
-              }, 'erc20');
-            }
-          }
+          if (!response.ok) break;
 
-          await new Promise(resolve => setTimeout(resolve, 200)); // Delay between tokens
-        }
+          const data = await response.json();
+          const owners = data.result || [];
+          allOwners = allOwners.concat(owners);
+          cursor = data.cursor || null;
+
+          if (allOwners.length > 150000) break;
+        } while (cursor);
+
+        return { token, owners: allOwners };
+      } catch (err) {
+        return { token, owners: [] };
+      }
+    };
+
+    // ========================================
+    // EXECUTE ALL FETCHES IN PARALLEL
+    // ========================================
+    const CONCURRENCY = 4;
+
+    // Run all three asset types concurrently
+    const [nftResults, poapResults, erc20Results] = await Promise.all([
+      selectedNFTs.length > 0
+        ? processWithConcurrency(selectedNFTs, CONCURRENCY, fetchNFTOwners)
+        : Promise.resolve([]),
+      selectedPOAPs.length > 0
+        ? processWithConcurrency(selectedPOAPs, CONCURRENCY, fetchPOAPHolders)
+        : Promise.resolve([]),
+      selectedERC20s.length > 0
+        ? processWithConcurrency(selectedERC20s, CONCURRENCY, fetchERC20Owners)
+        : Promise.resolve([])
+    ]);
+
+    // Aggregate NFT results
+    for (const { nft, owners } of nftResults) {
+      for (const owner of owners) {
+        const ownerAddress = typeof owner === 'string' ? owner : (owner?.ownerAddress || owner);
+        if (!ownerAddress) continue;
+        addOverlap(ownerAddress.toLowerCase(), {
+          address: nft.address,
+          network: nft.network,
+          name: nft.name,
+          type: 'NFT'
+        }, 'nft');
+      }
+    }
+
+    // Aggregate POAP results
+    for (const { poap, holders } of poapResults) {
+      for (const holder of holders) {
+        addOverlap(holder.toLowerCase(), {
+          eventId: poap.eventId,
+          name: poap.name,
+          type: 'POAP'
+        }, 'poap');
+      }
+    }
+
+    // Aggregate ERC-20 results
+    for (const { token, owners } of erc20Results) {
+      for (const owner of owners) {
+        addOverlap(owner.owner_address.toLowerCase(), {
+          address: token.address,
+          symbol: token.symbol,
+          name: token.name,
+          balance: owner.balance_formatted,
+          type: 'ERC-20'
+        }, 'erc20');
       }
     }
 

@@ -1,26 +1,28 @@
 // Step 1: Fetch and filter ERC-20 tokens by holder count (without analyzing overlap)
 import { MoralisConfig } from '../../moralis-config.js';
+import { validateAddressParam } from '../../lib/validation.js';
+import { processWithConcurrency } from '../../lib/concurrency.js';
+
+// Tell Next.js this route is always dynamic (uses request.url)
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   console.log('\n\n========================================');
   console.log('🚀 NEW REQUEST: get-filtered-tokens API');
   console.log('========================================\n');
-  
+
   try {
     const { searchParams } = new URL(request.url);
     const address = (searchParams.get('address') || '').trim().toLowerCase();
-    
-    if (!address) {
-      return new Response(
-        JSON.stringify({ error: 'Missing address parameter' }),
-        { status: 400, headers: { 'content-type': 'application/json' } }
-      );
-    }
 
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
+
+    const apiKey = process.env.MORALIS_API_KEY;
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'Moralis API key not configured' }),
+        JSON.stringify({ error: 'Missing MORALIS_API_KEY in environment' }),
         { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
@@ -83,49 +85,56 @@ export async function GET(request) {
 
     console.log(`\n📋 Checking ${allTokens.length} ERC-20 tokens (filter: ${minHolders}-${maxHolders} holders):\n`);
 
-    // Step 2: Filter tokens by holder count (sequential processing for reliability)
-    const filteredTokens = [];
-    
-    // Process tokens one at a time (more reliable, respects rate limits)
-    for (let i = 0; i < allTokens.length; i++) {
-      const token = allTokens[i];
-      
-      try {
-        const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
-        const holdersResponse = await fetch(holdersUrl, {
-          headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-        });
+    // Step 2: Filter tokens by holder count (parallel batching for speed)
+    // Process 4 tokens concurrently to stay within Vercel's 15s timeout
+    // 227 tokens × 150ms sequential = 34s (TIMEOUT)
+    // 227 tokens ÷ 4 concurrent × 150ms = ~8.5s (OK)
+    const CONCURRENCY = 4;
+    const BATCH_DELAY_MS = 50; // Small delay between batches to respect rate limits
 
-        if (holdersResponse.ok) {
-          const holdersData = await holdersResponse.json();
-          const holderCount = holdersData.totalHolders || 0;
+    const tokenResults = await processWithConcurrency(
+      allTokens,
+      CONCURRENCY,
+      async (token) => {
+        try {
+          const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
+          const holdersResponse = await fetch(holdersUrl, {
+            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+          });
 
-          const passed = holderCount >= minHolders && holderCount <= maxHolders;
-          const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
-          
-          console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+          if (holdersResponse.ok) {
+            const holdersData = await holdersResponse.json();
+            const holderCount = holdersData.totalHolders || 0;
 
-          if (passed) {
-            filteredTokens.push({
-              address: token.token_address,
-              symbol: token.symbol || 'UNKNOWN',
-              name: token.name || 'Unknown Token',
-              holderCount,
-              balance: token.balance_formatted || '0',
-              logo: token.logo || token.thumbnail || null,
-              usdValue: token.usd_value || null
-            });
+            const passed = holderCount >= minHolders && holderCount <= maxHolders;
+            const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+
+            console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+
+            // Add small delay after each request to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+
+            if (passed) {
+              return {
+                address: token.token_address,
+                symbol: token.symbol || 'UNKNOWN',
+                name: token.name || 'Unknown Token',
+                holderCount,
+                balance: token.balance_formatted || '0',
+                logo: token.logo || token.thumbnail || null,
+                usdValue: token.usd_value || null
+              };
+            }
           }
+        } catch (err) {
+          console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
         }
-      } catch (err) {
-        console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
+        return null; // Token didn't pass filter or failed
       }
-      
-      // Delay between each token request (avoid rate limiting)
-      if (i < allTokens.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
-    }
+    );
+
+    // Filter out null results (tokens that didn't pass or failed)
+    const filteredTokens = tokenResults.filter(Boolean);
 
     // Calculate estimates if user selects all tokens
     const avgHolders = filteredTokens.length > 0 
@@ -173,9 +182,10 @@ export async function GET(request) {
     );
 
   } catch (error) {
-    console.error('[Filtered Tokens] Error:', error);
+    // Always log errors - Vercel captures these logs
+    console.error('[Filtered Tokens] error', { message: error.message, stack: error.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }

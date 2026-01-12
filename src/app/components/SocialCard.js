@@ -1,25 +1,31 @@
-import { useEffect, useState, useContext, useRef } from "react";
+import { useEffect, useState, memo } from "react";
 
 import { Address } from './Address'
 
-export const SocialCard = ({ airstack, count, address , inModal }) => {
+export const SocialCard = memo(function SocialCard({ airstack, count, address, inModal, prefetchedSocials }) {
     const [socials, setSocials] = useState([]);
     const [image, setImage] = useState("/kindredSpirit.png");
-  
+
     useEffect(() => {
+      // Use pre-fetched data if available, otherwise fetch individually
+      if (prefetchedSocials !== undefined) {
+        const farcasterOnly = Array.isArray(prefetchedSocials) ? prefetchedSocials.filter(s => s.dappName === 'farcaster') : [];
+        setSocials(farcasterOnly);
+        const profileImage = farcasterOnly.find(social => (social.profileImage || '').startsWith('http'))?.profileImage;
+        if (profileImage) setImage(profileImage);
+        return;
+      }
+
       const fetchSocials = async () => {
         const result = await airstack.socialLookup(address);
         const farcasterOnly = Array.isArray(result) ? result.filter(s => s.dappName === 'farcaster') : [];
-        if (typeof window !== 'undefined') {
-          console.log('Farcaster profiles found', { address, count: farcasterOnly.length });
-        }
         setSocials(farcasterOnly);
         const profileImage = farcasterOnly.find(social => (social.profileImage || '').startsWith('http'))?.profileImage;
         if (profileImage) setImage(profileImage);
       };
 
       fetchSocials();
-    }, [address]);
+    }, [address, prefetchedSocials, airstack]);
     return (
     <div className="flex items-center gap-x-3">
       <img
@@ -51,5 +57,5 @@ export const SocialCard = ({ airstack, count, address , inModal }) => {
         ))}
       </div>
     </div>
-    </div>)
-  };
+    </div>);
+});

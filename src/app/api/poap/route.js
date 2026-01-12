@@ -1,44 +1,36 @@
+import { validateAddressParam } from '../../lib/validation.js';
+import { fetchJson } from '../../lib/fetch-utils.js';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const raw = (searchParams.get('address') || '').trim();
     const dropIdParam = (searchParams.get('dropId') || '').trim();
-    const debug = searchParams.get('debug') === '1';
-    if (!raw) {
-      return new Response(JSON.stringify({ error: 'Missing query param: address' }), { status: 400 });
-    }
+    // Only allow debug param in non-production
+    const debug = process.env.NODE_ENV !== 'production' && searchParams.get('debug') === '1';
 
     const address = raw.toLowerCase();
+
+    // Validate address format
+    const validationError = validateAddressParam(address);
+    if (validationError) return validationError;
     const dropId = dropIdParam ? Number(dropIdParam) : undefined;
 
-    const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';
+    const apiKey = process.env.POAP_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Missing POAP_API_KEY in environment' }),
-        { status: 500 }
+        { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
 
     const headers = { 'accept': 'application/json', 'x-api-key': apiKey };
     const url = `https://api.poap.tech/actions/scan/${encodeURIComponent(address)}`;
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[POAP API] request', { url, address, dropId });
-    }
 
-    const res = await fetch(url, { headers, cache: 'no-store' });
-    if (!res.ok) {
-      let bodyText = '';
-      try { bodyText = await res.text(); } catch { bodyText = ''; }
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[POAP API] failure', { status: res.status, address, body: bodyText });
-      }
-      return new Response(
-        JSON.stringify({ error: 'Lookup failed', address, status: res.status, body: bodyText }),
-        { status: res.status || 502, headers: { 'content-type': 'application/json' } }
-      );
-    }
+    const result = await fetchJson(url, { headers, next: { revalidate: 300 } }, { name: 'POAP API', identifier: address });
+    if (!result.ok) return result.error;
 
-    const events = await res.json();
+    const events = result.data;
     const simplified = Array.isArray(events)
       ? events.map(e => ({ id: e?.event?.id ?? e?.id, name: e?.event?.name ?? e?.name, image_url: e?.event?.image_url ?? e?.image_url, created: e?.created }))
       : [];
@@ -48,8 +40,10 @@ export async function GET(request) {
       : { address, count: simplified.length, hasDrop, events: simplified };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
+    // Always log errors - Vercel captures these logs
+    console.error('[POAP API] error', { message: e.message, stack: e.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: 'Unhandled error', message: e?.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }

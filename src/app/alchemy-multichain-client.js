@@ -402,7 +402,7 @@ AlchemyMultichainClient.prototype.getOwnersCountForContract = async function get
                 const url = new URL('/api/poap/event', urlBase);
                 url.searchParams.set('id', eventId);
                 url.searchParams.set('page', String(page));
-                const res = await fetch(url.toString(), { cache: 'no-store' });
+                const res = await fetch(url.toString(), { next: { revalidate: 300 } });
                 if (!res.ok) break;
                 const data = await res.json();
                 const holders = Array.isArray(data?.holders) ? data.holders : [];

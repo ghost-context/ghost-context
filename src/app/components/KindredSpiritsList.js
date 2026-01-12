@@ -2,18 +2,23 @@ import { useEffect, useState, useContext, useRef } from "react";
 import { Network } from "alchemy-sdk";
 import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { NeynarClient } from '../neynar';
+import { processWithConcurrency } from '../lib/concurrency';
 
 import NftModal from "./NftModal";
-import { useEnsName } from "wagmi";
-import { ethers } from "ethers";
 import { saveAs } from 'file-saver';
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
 import { useAccount } from 'wagmi';
 import Modal from 'react-modal';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { SocialCard } from './SocialCard'
 
-const provider = ethers.getDefaultProvider();
+// Viem client for ENS lookups
+const viemClient = createPublicClient({
+  chain: mainnet,
+  transport: http(),
+});
 
 const alchemy = new AlchemyMultichainClient();
 const airstack = new NeynarClient();
@@ -39,6 +44,7 @@ const KindredSpiritsList = () => {
   const [buttonText, setButtonText] = useState("Download Kindred Spirits");
   const [scrollRequested, setScrollRequested] = useState(false);
   const scrollToRef = useRef(null);
+  const [socialDataMap, setSocialDataMap] = useState(new Map());
   const {
     selectedCollectionsContext,
     setSelectedCollectionsContext,
@@ -105,7 +111,7 @@ const KindredSpiritsList = () => {
       // Try to resolve the ENS name for the address. If it doesn't exist, use the original address.
       let ensName = address;
       try {
-        ensName = await provider.lookupAddress(address) || address;
+        ensName = await viemClient.getEnsName({ address }) || address;
       } catch (error) {
         console.error(`No ENS name found for address: ${address}`);
       }
@@ -136,76 +142,75 @@ const KindredSpiritsList = () => {
       let targetAddress = addressOrEns;
       setIsLoading(true); // show the modal
       setTotalContracts(nftAddressesArray.length);
-      // if (!addressOrEns.startsWith("0x")) {
-      //   targetAddress = await alchemy.core.resolveName(addressOrEns);
-      // } else {
-      //   targetAddress = addressOrEns;
-      // }
-      let ownersCount = {};
-      let contractsInCommon = {};
-      // Local variable for total wallets
+
+      // Shared state for aggregating results (thread-safe via closure)
+      const ownersCount = {};
+      const contractsInCommon = {};
       let totalWalletsLocal = 0;
-      let progress = 0;
-      setProgress(0)
-      for (const { address: nftAddress, network: nftNetwork, name } of nftAddressesArray) {
+      let progressLocal = 0;
+      setProgress(0);
+
+      // Process a single collection and return its owners
+      const processCollection = async ({ address: nftAddress, network: nftNetwork, name }) => {
+        const collectionOwners = [];
+
         if (nftNetwork === 'POAP') {
           // nftAddress format: poap:<eventId>
           const eventId = String(nftAddress || '').startsWith('poap:') ? String(nftAddress).split(':')[1] : String(nftAddress || '');
-          if (!eventId) continue;
+          if (!eventId) return { owners: [], nftAddress, nftNetwork, name };
+
           let page = 0;
           let pageCount = 0;
+          let localTotal = 0;
           do {
             const urlBase = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
             const url = new URL('/api/poap/event', urlBase);
             url.searchParams.set('id', eventId);
             url.searchParams.set('page', String(page));
-            const res = await fetch(url.toString(), { cache: 'no-store' }).catch(() => null);
+            const res = await fetch(url.toString()).catch(() => null);
             const data = res && res.ok ? await res.json() : { holders: [] };
             const holders = Array.isArray(data?.holders) ? data.holders : [];
             pageCount = holders.length;
-            totalWalletsLocal += holders.length;
-            progress += holders.length;
-            setProgress(progress);
-            holders.forEach((owner) => {
-              ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
-              if (!contractsInCommon[owner]) {
-                contractsInCommon[owner] = { count: 0, contractsInCommon: {} };
-              }
-              if(!contractsInCommon[owner].contractsInCommon[nftAddress]) {
-                contractsInCommon[owner].count++;
-                contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
-              }
-            });
+            collectionOwners.push(...holders);
+            localTotal += holders.length;
+            progressLocal += holders.length;
+            setProgress(progressLocal);
             page += 1;
-          } while (pageCount === 500 && totalWalletsLocal < 150000);
+          } while (pageCount === 500 && localTotal < 150000);
         } else {
-          let owners = [];
           let pageKey = undefined;
           do {
             const resp = await alchemy.forNetwork(nftNetwork).nft.getOwnersForContract(nftAddress, { pageKey }).catch(() => null);
             const batch = resp && Array.isArray(resp.owners) ? resp.owners : [];
-            owners = owners.concat(batch);
-            progress += batch.length;
-            setProgress(progress);
-            if (owners.length > 150000) {
-              break; // break out of the loop entirely
+            collectionOwners.push(...batch);
+            progressLocal += batch.length;
+            setProgress(progressLocal);
+            if (collectionOwners.length > 150000) {
+              break;
             }
             pageKey = resp ? resp.pageKey : undefined;
           } while (pageKey);
-          totalWalletsLocal += owners.length;
+        }
 
-          owners.forEach((owner) => {
-            ownersCount[owner] = ownersCount[owner] ? ownersCount[owner] + 1 : 1;
-            if (!contractsInCommon[owner]) {
-              contractsInCommon[owner] = { count: 0, contractsInCommon: {} };
-            }
-            if(!contractsInCommon[owner].contractsInCommon[nftAddress]) {
-              contractsInCommon[owner].count++;
-              contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
-            }
-          });
-          // clear owners array
-          owners = null;
+        return { owners: collectionOwners, nftAddress, nftNetwork, name };
+      };
+
+      // Process collections in parallel with concurrency limit of 4
+      const CONCURRENCY = 4;
+      const results = await processWithConcurrency(nftAddressesArray, CONCURRENCY, processCollection);
+
+      // Aggregate results from all collections
+      for (const { owners, nftAddress, nftNetwork, name } of results) {
+        totalWalletsLocal += owners.length;
+        for (const owner of owners) {
+          ownersCount[owner] = (ownersCount[owner] || 0) + 1;
+          if (!contractsInCommon[owner]) {
+            contractsInCommon[owner] = { count: 0, contractsInCommon: {} };
+          }
+          if (!contractsInCommon[owner].contractsInCommon[nftAddress]) {
+            contractsInCommon[owner].count++;
+            contractsInCommon[owner].contractsInCommon[nftAddress] = { nftAddress, nftNetwork, name };
+          }
         }
       }
 
@@ -245,6 +250,17 @@ const KindredSpiritsList = () => {
 
       setSortedResult(sortedResult);
       setFilteredContractsForModal(sortedResultContractsInCommon);
+
+      // Batch fetch social data for top 20 kindred spirits
+      const top20Addresses = Object.keys(sortedResultContractsInCommon).slice(0, 20);
+      if (top20Addresses.length > 0) {
+        airstack.batchSocialLookup(top20Addresses).then(socialMap => {
+          setSocialDataMap(socialMap);
+        }).catch(() => {
+          // Silently fail - individual cards will fetch their own data
+        });
+      }
+
       setIsLoading(false); // hide the modal
       setScrollRequested(true);
       // Clear selected collections after a brief delay to avoid state update during render
@@ -284,7 +300,7 @@ const KindredSpiritsList = () => {
       setTriggerKindredSpirits(false); // Reset the trigger after using it
     }
 
-  }, [triggerKindredSpirits, ensAddress, address, selectedCollectionsContext]);
+  }, [triggerKindredSpirits, ensAddress, address, selectedCollectionsContext, setSelectedCollectionsContext, setTriggerKindredSpirits]);
 
 
   useEffect(() => {
@@ -316,7 +332,7 @@ const KindredSpiritsList = () => {
             <ul role="list" className="divide-y">
               {Object.entries(filteredContractsForModal).slice(0, 20).map(([address, { count, contractsInCommon }]) => (
                 <li key={address} className="py-4">
-                  <SocialCard airstack={airstack} address={address} count={count}/>
+                  <SocialCard airstack={airstack} address={address} count={count} prefetchedSocials={socialDataMap.get(address.toLowerCase())}/>
                   <p className="mt-3 truncate text-sm text-gray-500">
                     This address holds{" "}
                     <span className="text-gray-400">{count}</span> out of the <span className="text-gray-400">{ownedCollections.length}</span>

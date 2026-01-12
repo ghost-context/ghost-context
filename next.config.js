@@ -1,5 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable standalone output for Docker deployments
+  output: 'standalone',
+  // Rewrite /health to /api/health for Cloud Run health checks
+  async rewrites() {
+    return [
+      {
+        source: '/health',
+        destination: '/api/health',
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
     
@@ -12,17 +23,11 @@ const nextConfig = {
       crypto: false,
     };
     
-    // Ignore react-native modules on the server
-    if (!isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@react-native-async-storage/async-storage': false,
-      };
-    }
-    
-    // Ignore indexedDB errors on server
+    // Ignore react-native modules (MetaMask SDK tries to import these)
     config.resolve.alias = {
       ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': false,
+      'react-native': false,
       'idb-keyval': isServer ? false : 'idb-keyval',
     };
     

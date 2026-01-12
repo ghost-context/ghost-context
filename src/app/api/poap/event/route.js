@@ -1,18 +1,29 @@
+import { isValidEventId } from '../../../lib/validation.js';
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = (searchParams.get('id') || '').trim();
     const pageParam = (searchParams.get('page') || '').trim();
     const countOnly = searchParams.get('countOnly') === '1';
+
     if (!id) {
       return new Response(JSON.stringify({ error: 'Missing query param: id' }), { status: 400 });
     }
 
-    const apiKey = process.env.POAP_API_KEY || process.env.NEXT_PUBLIC_POAP_API_KEY || '';
+    // Validate event ID is numeric
+    if (!isValidEventId(id)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid event ID format. Expected numeric ID.' }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
+    }
+
+    const apiKey = process.env.POAP_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Missing POAP_API_KEY in environment' }),
-        { status: 500 }
+        { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
 
@@ -21,7 +32,8 @@ export async function GET(request) {
     // However, older integrations used `/event/{id}/token-holders` which now returns 403 "Missing Authentication Token".
     // Implement a resilient fetch that tries the legacy endpoint first, then falls back to the new one, and parses both shapes.
     const headers = { 'accept': 'application/json', 'x-api-key': apiKey };
-    const debug = searchParams.get('debug') === '1';
+    // Only allow debug param in non-production
+    const debug = process.env.NODE_ENV !== 'production' && searchParams.get('debug') === '1';
     const LEGACY_LIMIT = 500; // for /token-holders (older endpoint)
     const POAPS_LIMIT = 300;  // for /poaps (per docs, max 300)
 
@@ -67,7 +79,7 @@ export async function GET(request) {
       if (process.env.NODE_ENV !== 'production') {
         console.log('[POAP Event Holders] request', { id, url, limit: firstLimit, offset: pageNum * firstLimit, page: pageNum });
       }
-      let res = await fetch(url, { headers, cache: 'no-store' });
+      let res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
       if (res.ok) {
         const data = await res.json();
         if (process.env.NODE_ENV !== 'production') {
@@ -92,22 +104,20 @@ export async function GET(request) {
       }
       let bodyText = '';
       try { bodyText = await res.text(); } catch { bodyText = ''; }
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[POAP Event Holders] failure', { status: res.status, id, body: bodyText });
-      }
+      // Always log failures - Vercel captures these logs
+      console.warn('[POAP Event Holders] failure', { status: res.status, id, body: bodyText.slice(0, 500) });
       // If 403/404 on legacy, fall back to poaps path
       const secondLimit = second === legacyBase ? LEGACY_LIMIT : POAPS_LIMIT;
       url = buildUrl(second, pageNum, secondLimit);
       if (process.env.NODE_ENV !== 'production') {
         console.log('[POAP Event Holders] fallback request', { id, url, limit: secondLimit, offset: pageNum * secondLimit, page: pageNum });
       }
-      res = await fetch(url, { headers, cache: 'no-store' });
+      res = await fetch(url, { headers, next: { revalidate: 300 } }); // Cache for 5 minutes
       if (!res.ok) {
         let bodyText2 = '';
         try { bodyText2 = await res.text(); } catch { bodyText2 = ''; }
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[POAP Event Holders] fallback failure', { status: res.status, id, body: bodyText2 });
-        }
+        // Always log failures - Vercel captures these logs
+        console.warn('[POAP Event Holders] fallback failure', { status: res.status, id, body: bodyText2.slice(0, 500) });
         return { ok: false, status: res.status, body: bodyText2 };
       }
       const data2 = await res.json();
@@ -155,7 +165,7 @@ export async function GET(request) {
       if (total === 0) {
         try {
           const detailsUrl = `https://api.poap.tech/events/id/${encodeURIComponent(id)}`;
-          const detailsRes = await fetch(detailsUrl, { headers, cache: 'no-store' });
+          const detailsRes = await fetch(detailsUrl, { headers, next: { revalidate: 300 } });
           if (detailsRes.ok) {
             const ev = await detailsRes.json();
             const supply = Number(ev?.supply || 0);
@@ -171,7 +181,7 @@ export async function GET(request) {
     const result = await fetchPage(page, 'legacy');
     if (!result.ok) {
       return new Response(
-        JSON.stringify({ error: 'Lookup failed', id, status: result.status || 502, body: result.body || '' }),
+        JSON.stringify({ error: 'Lookup failed' }),
         { status: result.status || 502, headers: { 'content-type': 'application/json' } }
       );
     }
@@ -180,8 +190,10 @@ export async function GET(request) {
     const payload = debug ? { id, holders: unique, debug: { usedLimit: result.usedLimit, sampleRaw: Array.isArray(result.raw) ? result.raw.slice(0, 2) : (Array.isArray(result.raw?.poaps) ? result.raw.poaps.slice(0, 2) : (Array.isArray(result.raw?.items) ? result.raw.items.slice(0, 2) : (Array.isArray(result.raw?.tokenHolders) ? result.raw.tokenHolders.slice(0, 2) : result.raw))) } } : { id, holders: unique };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e) {
+    // Always log errors - Vercel captures these logs
+    console.error('[POAP Event Holders] error', { message: e.message, stack: e.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: 'Unhandled error', message: e?.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
