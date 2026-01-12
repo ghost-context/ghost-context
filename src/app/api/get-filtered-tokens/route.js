@@ -1,6 +1,7 @@
 // Step 1: Fetch and filter ERC-20 tokens by holder count (without analyzing overlap)
 import { MoralisConfig } from '../../moralis-config.js';
 import { validateAddressParam } from '../../lib/validation.js';
+import { processWithConcurrency } from '../../lib/concurrency.js';
 
 // Tell Next.js this route is always dynamic (uses request.url)
 export const dynamic = 'force-dynamic';
@@ -84,49 +85,56 @@ export async function GET(request) {
 
     console.log(`\n📋 Checking ${allTokens.length} ERC-20 tokens (filter: ${minHolders}-${maxHolders} holders):\n`);
 
-    // Step 2: Filter tokens by holder count (sequential processing for reliability)
-    const filteredTokens = [];
-    
-    // Process tokens one at a time (more reliable, respects rate limits)
-    for (let i = 0; i < allTokens.length; i++) {
-      const token = allTokens[i];
-      
-      try {
-        const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
-        const holdersResponse = await fetch(holdersUrl, {
-          headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-        });
+    // Step 2: Filter tokens by holder count (parallel batching for speed)
+    // Process 4 tokens concurrently to stay within Vercel's 15s timeout
+    // 227 tokens × 150ms sequential = 34s (TIMEOUT)
+    // 227 tokens ÷ 4 concurrent × 150ms = ~8.5s (OK)
+    const CONCURRENCY = 4;
+    const BATCH_DELAY_MS = 50; // Small delay between batches to respect rate limits
 
-        if (holdersResponse.ok) {
-          const holdersData = await holdersResponse.json();
-          const holderCount = holdersData.totalHolders || 0;
+    const tokenResults = await processWithConcurrency(
+      allTokens,
+      CONCURRENCY,
+      async (token) => {
+        try {
+          const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
+          const holdersResponse = await fetch(holdersUrl, {
+            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+          });
 
-          const passed = holderCount >= minHolders && holderCount <= maxHolders;
-          const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
-          
-          console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+          if (holdersResponse.ok) {
+            const holdersData = await holdersResponse.json();
+            const holderCount = holdersData.totalHolders || 0;
 
-          if (passed) {
-            filteredTokens.push({
-              address: token.token_address,
-              symbol: token.symbol || 'UNKNOWN',
-              name: token.name || 'Unknown Token',
-              holderCount,
-              balance: token.balance_formatted || '0',
-              logo: token.logo || token.thumbnail || null,
-              usdValue: token.usd_value || null
-            });
+            const passed = holderCount >= minHolders && holderCount <= maxHolders;
+            const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+
+            console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+
+            // Add small delay after each request to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+
+            if (passed) {
+              return {
+                address: token.token_address,
+                symbol: token.symbol || 'UNKNOWN',
+                name: token.name || 'Unknown Token',
+                holderCount,
+                balance: token.balance_formatted || '0',
+                logo: token.logo || token.thumbnail || null,
+                usdValue: token.usd_value || null
+              };
+            }
           }
+        } catch (err) {
+          console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
         }
-      } catch (err) {
-        console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
+        return null; // Token didn't pass filter or failed
       }
-      
-      // Delay between each token request (avoid rate limiting)
-      if (i < allTokens.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
-    }
+    );
+
+    // Filter out null results (tokens that didn't pass or failed)
+    const filteredTokens = tokenResults.filter(Boolean);
 
     // Calculate estimates if user selects all tokens
     const avgHolders = filteredTokens.length > 0 
