@@ -137,8 +137,9 @@ export class AlchemyMultichainClient {
 /**
  * Extend the prototype with helper methods to replace SimpleHash capabilities
  */
-AlchemyMultichainClient.prototype.getCollectionsForOwner = async function getCollectionsForOwner(walletAddress, filter = 'relevant', progressCallback = () => {}) {
-    const allNetworks = this.getAllNetworks();
+AlchemyMultichainClient.prototype.getCollectionsForOwner = async function getCollectionsForOwner(walletAddress, filter = 'relevant', progressCallback = () => {}, networksToQuery = null) {
+    // If specific networks provided, only query those (for performance)
+    const allNetworks = networksToQuery || this.getAllNetworks();
     const results = [];
     let debugCount = 0;
 

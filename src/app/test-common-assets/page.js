@@ -86,16 +86,17 @@ const TestSocialCard = ({ address, count }) => {
 };
 
 // Helper: Fetch all assets for a wallet in parallel
-async function fetchWalletAssets(address) {
-  // Use already-imported classes from top of file
-  const alchemy = new AlchemyMultichainClient();
+// networks: optional array of networks to query (e.g., ['ETH_MAINNET', 'BASE_MAINNET'])
+// If not provided, queries all configured networks (slower)
+async function fetchWalletAssets(address, { networks = null } = {}) {
   const poapClient = new PoapClient();
 
   const [nftsResult, poapsResult, erc20sResult] = await Promise.allSettled([
-    // NFTs
+    // NFTs (if networks provided, only query those - much faster)
     (async () => {
       try {
-        const collections = await alchemy.getCollectionsForOwner(address, 'relevant');
+        const alchemy = new AlchemyMultichainClient();
+        const collections = await alchemy.getCollectionsForOwner(address, 'relevant', () => {}, networks);
         return collections
           .filter(nft => nft.network !== 'POAP' && !nft.network?.toLowerCase().includes('poap'))
           .map(nft => ({
@@ -812,9 +813,14 @@ export default function TestCommonAssetsPage() {
     });
 
     try {
+      // Extract networks from source wallet's NFTs (only query these for kindred spirits)
+      // This reduces from 5 networks to only the ones that matter, e.g., 1-2 networks
+      const relevantNetworks = [...new Set(nftCollections.map(nft => nft.network))];
+      console.log(`Optimizing NFT fetch: only querying ${relevantNetworks.length} networks:`, relevantNetworks);
+
       // Fetch all kindred spirits' assets in PARALLEL
       const results = await Promise.allSettled(
-        spiritsToFetch.map(address => fetchWalletAssets(address))
+        spiritsToFetch.map(address => fetchWalletAssets(address, { networks: relevantNetworks.length > 0 ? relevantNetworks : null }))
       );
 
       // Separate successes from failures
