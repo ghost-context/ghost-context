@@ -134,18 +134,17 @@ async function fetchWalletAssets(address) {
       }
     })(),
 
-    // ERC-20s
+    // ERC-20s (use fast endpoint - no holder count filtering needed for intersection)
     (async () => {
       try {
-        const res = await fetch(`/api/get-filtered-tokens?address=${address}`);
+        const res = await fetch(`/api/get-tokens-fast?address=${address}`);
         if (!res.ok) return [];
         const data = await res.json();
-        return (data.filteredTokens || []).map(t => ({
+        return (data.tokens || []).map(t => ({
           address: t.address,
           symbol: t.symbol,
           name: t.name,
-          logo: t.logo,
-          holderCount: t.holderCount
+          logo: t.logo
         }));
       } catch (err) {
         console.warn(`Failed to fetch ERC-20s for ${address}:`, err.message);
