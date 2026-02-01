@@ -87,9 +87,7 @@ const TestSocialCard = ({ address, count }) => {
 
 // Helper: Fetch all assets for a wallet in parallel
 async function fetchWalletAssets(address) {
-  const { AlchemyMultichainClient } = await import('../alchemy-multichain-client');
-  const { PoapClient } = await import('../poap-client');
-
+  // Use already-imported classes from top of file
   const alchemy = new AlchemyMultichainClient();
   const poapClient = new PoapClient();
 
