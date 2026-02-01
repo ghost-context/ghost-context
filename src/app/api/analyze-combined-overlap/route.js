@@ -3,6 +3,8 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
 import { validateAddressParam } from '../../lib/validation.js';
+import { TopK } from '../../lib/top-k.js';
+import { fetchWithRetry } from '../../lib/fetch-with-retry.js';
 
 export async function POST(request) {
   try {
@@ -141,14 +143,15 @@ export async function POST(request) {
           });
           if (cursor) params.set('cursor', cursor);
 
-          const response = await fetch(
+          const response = await fetchWithRetry(
             `${baseUrl}/erc20/${token.address}/owners?${params}`,
             {
               headers: {
                 'accept': 'application/json',
                 'X-API-Key': apiKey
               }
-            }
+            },
+            { maxRetries: 2, baseDelayMs: 500 }
           );
 
           if (!response.ok) break;
@@ -224,35 +227,43 @@ export async function POST(request) {
     }
 
     // ========================================
-    // 4. COMPILE RESULTS
+    // 4. COMPILE RESULTS USING TOP-K
     // ========================================
-    
+
     console.log(`\n📊 Analysis Complete:`);
     console.log(`   Total wallets with ANY overlap: ${overlapMap.size}`);
     console.log(`   Source wallet: ${address}`);
-    
+
     // Determine minimum overlap threshold
     const minOverlap = totalAssets >= 2 ? 2 : 1;
     console.log(`   Minimum overlap threshold: ${minOverlap} assets`);
 
-    const kindredSpirits = Array.from(overlapMap.entries())
-      .filter(([wallet, data]) => data.count >= minOverlap) // Must have at least minOverlap shared assets
-      .map(([wallet, data]) => ({
-        address: wallet,
-        overlapCount: data.count,
-        overlapPercentage: ((data.count / totalAssets) * 100).toFixed(1),
-        sharedAssets: {
-          nfts: data.assets.nfts,
-          poaps: data.assets.poaps,
-          erc20s: data.assets.erc20s
-        },
-        totalShared: data.count
-      }))
-      .sort((a, b) => b.overlapCount - a.overlapCount)
-      .slice(0, 100); // Top 100 after filtering
+    // Use TopK to efficiently find top 100 results (O(k) memory vs O(n))
+    const topK = new TopK(100, (a, b) => a.overlapCount - b.overlapCount);
+    let filteredCount = 0;
+
+    for (const [wallet, data] of overlapMap.entries()) {
+      if (data.count >= minOverlap) {
+        topK.push({
+          address: wallet,
+          overlapCount: data.count,
+          overlapPercentage: ((data.count / totalAssets) * 100).toFixed(1),
+          sharedAssets: {
+            nfts: data.assets.nfts,
+            poaps: data.assets.poaps,
+            erc20s: data.assets.erc20s
+          },
+          totalShared: data.count
+        });
+      } else {
+        filteredCount++;
+      }
+    }
+
+    const kindredSpirits = topK.getResults();
 
     console.log(`   Kindred spirits found (>= ${minOverlap} overlaps): ${kindredSpirits.length}`);
-    console.log(`   Filtered out (< ${minOverlap} overlaps): ${overlapMap.size - kindredSpirits.length}\n`);
+    console.log(`   Filtered out (< ${minOverlap} overlaps): ${filteredCount}\n`);
 
     return new Response(
       JSON.stringify({
