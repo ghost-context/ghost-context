@@ -303,11 +303,6 @@ export default function TestCommonAssetsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [viewingSpiritAssets]);
 
-  // Debug: Log ERC-20 tokens state changes
-  useEffect(() => {
-    console.log('🪙 erc20Tokens state updated:', erc20Tokens.length, 'tokens');
-  }, [erc20Tokens]);
-
   // Resolve ENS name to address
   const resolveENSToAddress = async (input) => {
     try {
@@ -395,14 +390,12 @@ export default function TestCommonAssetsPage() {
       try {
         const erc20Response = await fetch(`/api/get-filtered-tokens?address=${targetAddress}`);
         const erc20Data = await erc20Response.json();
-        console.log('🪙 ERC-20 API Response:', { ok: erc20Response.ok, filteredCount: erc20Data.filteredTokens?.length, data: erc20Data });
         if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
-          console.log('🪙 Setting ERC-20 tokens:', erc20Data.filteredTokens.length);
           setErc20Tokens(erc20Data.filteredTokens);
           hasAssets = true;
         }
       } catch (err) {
-        console.error('❌ Failed to fetch ERC-20 tokens:', err);
+        console.warn('Failed to fetch ERC-20 tokens:', err.message);
       }
 
       // 2. Fetch NFT Collections
@@ -500,7 +493,6 @@ export default function TestCommonAssetsPage() {
       }
 
       if (hasAssets) {
-        console.log('✅ Moving to Step 2 - Assets loaded');
         setStep(2);
       } else {
         setError('No assets found for this wallet');
