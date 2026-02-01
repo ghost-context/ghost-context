@@ -85,6 +85,85 @@ const TestSocialCard = ({ address, count }) => {
   );
 };
 
+// Helper: Fetch all assets for a wallet in parallel
+async function fetchWalletAssets(address) {
+  const { AlchemyMultichainClient } = await import('../alchemy-multichain-client');
+  const { PoapClient } = await import('../poap-client');
+
+  const alchemy = new AlchemyMultichainClient();
+  const poapClient = new PoapClient();
+
+  const [nftsResult, poapsResult, erc20sResult] = await Promise.allSettled([
+    // NFTs
+    (async () => {
+      try {
+        const collections = await alchemy.getCollectionsForOwner(address, 'relevant');
+        return collections
+          .filter(nft => nft.network !== 'POAP' && !nft.network?.toLowerCase().includes('poap'))
+          .map(nft => ({
+            id: `${nft.network}-${nft.contract_address}`,
+            address: nft.contract_address,
+            network: nft.network,
+            name: nft.name || 'Unknown Collection',
+            image: nft.image_small_url || nft.image
+          }));
+      } catch (err) {
+        console.warn(`Failed to fetch NFTs for ${address}:`, err.message);
+        return [];
+      }
+    })(),
+
+    // POAPs
+    (async () => {
+      try {
+        const poapData = await poapClient.scanAddress(address);
+        const poaps = poapData?.events || poapData?.poaps || [];
+        const unique = new Map();
+        for (const poap of poaps) {
+          const eventId = String(poap.id || poap.event?.id || poap.eventId);
+          if (eventId && !unique.has(eventId)) {
+            unique.set(eventId, {
+              eventId,
+              name: poap.name || poap.event?.name || 'Unknown Event',
+              image: poap.image_url || poap.event?.image_url || poap.imageUrl
+            });
+          }
+        }
+        return Array.from(unique.values());
+      } catch (err) {
+        console.warn(`Failed to fetch POAPs for ${address}:`, err.message);
+        return [];
+      }
+    })(),
+
+    // ERC-20s
+    (async () => {
+      try {
+        const res = await fetch(`/api/get-filtered-tokens?address=${address}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return (data.filteredTokens || []).map(t => ({
+          address: t.address,
+          symbol: t.symbol,
+          name: t.name,
+          logo: t.logo,
+          holderCount: t.holderCount
+        }));
+      } catch (err) {
+        console.warn(`Failed to fetch ERC-20s for ${address}:`, err.message);
+        return [];
+      }
+    })()
+  ]);
+
+  return {
+    address,
+    nfts: nftsResult.status === 'fulfilled' ? nftsResult.value : [],
+    poaps: poapsResult.status === 'fulfilled' ? poapsResult.value : [],
+    erc20s: erc20sResult.status === 'fulfilled' ? erc20sResult.value : []
+  };
+}
+
 export default function TestCommonAssetsPage() {
   const [walletAddress, setWalletAddress] = useState('0x1b4a302D15412655877d86ae82823D8F6d085ddD');
   const [ensName, setEnsName] = useState('');
