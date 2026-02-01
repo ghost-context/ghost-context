@@ -82,20 +82,39 @@ export async function GET(request) {
     // Handle both response formats: direct array or {result: [...]}
     const allTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
 
+    // Pre-filter obvious spam tokens BEFORE making holder count API calls
+    // This dramatically reduces the number of API calls needed
+    const spamPatterns = [
+      /claim\s*on/i,           // "Claim on: ..."
+      /airdrop/i,              // Airdrop scams
+      /^https?:\/\//i,         // Starts with URL
+      /\.(com|xyz|live|io|net|org|co|claim)\/?/i,  // Contains domain
+      /visit\s+/i,             // "Visit ..."
+      /free\s+/i,              // "Free ..."
+    ];
+
+    const isSpamToken = (token) => {
+      const name = token.name || '';
+      const symbol = token.symbol || '';
+      return spamPatterns.some(pattern => pattern.test(name) || pattern.test(symbol));
+    };
+
+    const legitimateTokens = allTokens.filter(token => !isSpamToken(token));
+    const spamCount = allTokens.length - legitimateTokens.length;
+
     // Log configuration on first use
     MoralisConfig.logConfig();
 
-    console.log(`\n📋 Checking ${allTokens.length} ERC-20 tokens (filter: ${minHolders}-${maxHolders} holders):\n`);
+    console.log(`\n📋 Pre-filtered ${spamCount} spam tokens, checking ${legitimateTokens.length} remaining (filter: ${minHolders}-${maxHolders} holders):\n`);
 
     // Step 2: Filter tokens by holder count (parallel batching for speed)
-    // Process 4 tokens concurrently to stay within Vercel's 15s timeout
-    // 227 tokens × 150ms sequential = 34s (TIMEOUT)
-    // 227 tokens ÷ 4 concurrent × 150ms = ~8.5s (OK)
-    const CONCURRENCY = 4;
-    const BATCH_DELAY_MS = 50; // Small delay between batches to respect rate limits
+    // Increased concurrency from 4 to 12 for faster processing
+    // With pre-filtering: ~100 tokens ÷ 12 concurrent × 150ms = ~1.25s
+    const CONCURRENCY = 12;
+    const BATCH_DELAY_MS = 25; // Reduced delay since we have fewer tokens
 
     const tokenResults = await processWithConcurrency(
-      allTokens,
+      legitimateTokens,
       CONCURRENCY,
       async (token) => {
         try {
@@ -152,8 +171,9 @@ export async function GET(request) {
     const costEstimate = MoralisConfig.estimateCost(filteredTokens.length, avgHolders);
 
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed filter (${minHolders}-${maxHolders} holders)`);
-    console.log(`   📊 ${filteredTokens.length} passed / ${allTokens.length - filteredTokens.length} filtered out`);
+    console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed`);
+    console.log(`   🚫 ${spamCount} spam tokens pre-filtered`);
+    console.log(`   📊 ${legitimateTokens.length} checked → ${filteredTokens.length} passed (${minHolders}-${maxHolders} holders)`);
     
     if (filteredTokens.length > 0) {
       console.log(`\n   ✅ Tokens that PASSED filter:`);
