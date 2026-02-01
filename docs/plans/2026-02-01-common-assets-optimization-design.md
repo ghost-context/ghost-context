@@ -1,5 +1,8 @@
 # Common Assets Optimization Design
 *Created: 2026-02-01*
+*Completed: 2026-02-01*
+
+> **STATUS: COMPLETED** - Shipped in branch `sloan-updates-2`
 
 ## Overview
 
