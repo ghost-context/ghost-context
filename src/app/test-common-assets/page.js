@@ -393,6 +393,9 @@ export default function TestCommonAssetsPage() {
         if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
           setErc20Tokens(erc20Data.filteredTokens);
           hasAssets = true;
+        } else if (erc20Response.ok && erc20Data.totalTokens > 0) {
+          // Tokens exist but all filtered out (>10k holders or <2 holders)
+          console.log(`ERC-20: ${erc20Data.totalTokens} tokens found but all filtered out (${erc20Data.criteria?.minHolders}-${erc20Data.criteria?.maxHolders} holder filter)`);
         }
       } catch (err) {
         console.warn('Failed to fetch ERC-20 tokens:', err.message);

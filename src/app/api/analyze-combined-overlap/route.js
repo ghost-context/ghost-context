@@ -105,7 +105,10 @@ export async function POST(request) {
         let allHolders = [];
 
         do {
-          const urlBase = 'http://localhost:3000';
+          // Use VERCEL_URL in production, localhost in dev
+          const urlBase = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000';
           const url = new URL('/api/poap/event', urlBase);
           url.searchParams.set('id', poap.eventId);
           url.searchParams.set('page', String(page));
