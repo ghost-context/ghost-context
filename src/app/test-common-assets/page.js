@@ -164,6 +164,58 @@ async function fetchWalletAssets(address) {
   };
 }
 
+// Helper: Compute intersection of assets across multiple wallets
+function computeIntersection(wallets) {
+  if (wallets.length === 0) {
+    return { nfts: [], poaps: [], erc20s: [] };
+  }
+
+  if (wallets.length === 1) {
+    return {
+      nfts: wallets[0].nfts,
+      poaps: wallets[0].poaps,
+      erc20s: wallets[0].erc20s
+    };
+  }
+
+  // Sort wallets by total asset count (smallest first for efficiency)
+  const sorted = [...wallets].sort((a, b) =>
+    (a.nfts.length + a.poaps.length + a.erc20s.length) -
+    (b.nfts.length + b.poaps.length + b.erc20s.length)
+  );
+
+  // Start with smallest wallet's assets as candidates
+  let candidateNFTs = new Set(sorted[0].nfts.map(n => n.id));
+  let candidatePOAPs = new Set(sorted[0].poaps.map(p => p.eventId));
+  let candidateERC20s = new Set(sorted[0].erc20s.map(t => t.address.toLowerCase()));
+
+  // Filter through remaining wallets
+  for (let i = 1; i < sorted.length; i++) {
+    const wallet = sorted[i];
+
+    const walletNFTs = new Set(wallet.nfts.map(n => n.id));
+    const walletPOAPs = new Set(wallet.poaps.map(p => p.eventId));
+    const walletERC20s = new Set(wallet.erc20s.map(t => t.address.toLowerCase()));
+
+    // Intersect each asset type
+    candidateNFTs = new Set([...candidateNFTs].filter(x => walletNFTs.has(x)));
+    candidatePOAPs = new Set([...candidatePOAPs].filter(x => walletPOAPs.has(x)));
+    candidateERC20s = new Set([...candidateERC20s].filter(x => walletERC20s.has(x)));
+
+    // Early termination if nothing left
+    if (candidateNFTs.size === 0 && candidatePOAPs.size === 0 && candidateERC20s.size === 0) {
+      break;
+    }
+  }
+
+  // Return full objects from smallest wallet (preserves metadata)
+  return {
+    nfts: sorted[0].nfts.filter(n => candidateNFTs.has(n.id)),
+    poaps: sorted[0].poaps.filter(p => candidatePOAPs.has(p.eventId)),
+    erc20s: sorted[0].erc20s.filter(t => candidateERC20s.has(t.address.toLowerCase()))
+  };
+}
+
 export default function TestCommonAssetsPage() {
   const [walletAddress, setWalletAddress] = useState('0x1b4a302D15412655877d86ae82823D8F6d085ddD');
   const [ensName, setEnsName] = useState('');
