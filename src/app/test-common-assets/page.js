@@ -385,17 +385,31 @@ export default function TestCommonAssetsPage() {
     try {
       let hasAssets = false;
 
-      // 1. Fetch ERC-20 tokens (filtered by holder count, spam pre-filtered)
+      // 1. Fetch ERC-20 tokens (fast endpoint - no holder counts)
+      // Holder counts can be loaded separately via "Load Holder Counts" button
       setProgress(prev => ({ ...prev, current: 1, message: 'Fetching ERC-20 tokens...' }));
       try {
-        const erc20Response = await fetch(`/api/get-filtered-tokens?address=${targetAddress}`);
+        const erc20Response = await fetch(`/api/get-tokens-fast?address=${targetAddress}`);
         const erc20Data = await erc20Response.json();
-        if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
-          setErc20Tokens(erc20Data.filteredTokens);
-          hasAssets = true;
-        } else if (erc20Response.ok && erc20Data.totalTokens > 0) {
-          // Tokens exist but all filtered out (>10k holders or <2 holders)
-          console.log(`ERC-20: ${erc20Data.totalTokens} tokens found but all filtered out (${erc20Data.criteria?.minHolders}-${erc20Data.criteria?.maxHolders} holder filter)`);
+        if (erc20Response.ok && erc20Data.tokens?.length > 0) {
+          // Pre-filter obvious spam tokens (same patterns as server-side filtering)
+          const spamPatterns = [
+            /^claim\s*on[:\s]/i,     // "Claim on: ..." at start
+            /^visit\s+/i,            // "Visit ..." at start
+            /^https?:\/\//i,         // Starts with URL
+          ];
+          const isSpamToken = (token) => {
+            const name = token.name || '';
+            const symbol = token.symbol || '';
+            return spamPatterns.some(pattern => pattern.test(name) || pattern.test(symbol));
+          };
+          const legitimateTokens = erc20Data.tokens.filter(token => !isSpamToken(token));
+          console.log(`ERC-20: ${erc20Data.tokens.length} tokens found, ${erc20Data.tokens.length - legitimateTokens.length} spam filtered, ${legitimateTokens.length} remaining`);
+
+          if (legitimateTokens.length > 0) {
+            setErc20Tokens(legitimateTokens);
+            hasAssets = true;
+          }
         }
       } catch (err) {
         console.warn('Failed to fetch ERC-20 tokens:', err.message);
@@ -543,6 +557,74 @@ export default function TestCommonAssetsPage() {
     }
 
     setNftCollections(updatedNFTs);
+    setLoading(false);
+    setProgress({ show: false, stage: '', current: 0, total: 0, message: '', isProcessing: false, elapsedSeconds: 0 });
+  };
+
+  // Fetch ERC-20 holder counts (batch processing) - filters tokens with <2 holders
+  const fetchERC20HolderCounts = async () => {
+    if (erc20Tokens.length === 0) return;
+
+    setLoading(true);
+    setProgress({
+      show: true,
+      stage: 'Fetching Holder Counts',
+      current: 0,
+      total: erc20Tokens.length,
+      message: 'Loading holder counts for ERC-20 tokens...',
+      isProcessing: false,
+      elapsedSeconds: 0
+    });
+
+    const apiKey = process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
+    const chain = '0x2105'; // Base network
+    const BATCH_SIZE = 4; // Lower concurrency for Moralis rate limits
+    const BATCH_DELAY_MS = 100; // Small delay between batches
+    const MIN_HOLDERS = 2;
+
+    const updatedTokens = [...erc20Tokens];
+    const tokensToKeep = [];
+
+    for (let i = 0; i < updatedTokens.length; i += BATCH_SIZE) {
+      const batch = updatedTokens.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(batch.map(async (token, idx) => {
+        try {
+          const holdersUrl = `${baseUrl}/erc20/${token.address}/holders?chain=${chain}`;
+          const response = await fetch(holdersUrl, {
+            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const holderCount = data.totalHolders || 0;
+            updatedTokens[i + idx].holderCount = holderCount;
+
+            if (holderCount >= MIN_HOLDERS) {
+              tokensToKeep.push(updatedTokens[i + idx]);
+            }
+          }
+        } catch (err) {
+          // Silently skip errors - token won't have holderCount
+        }
+      }));
+
+      setProgress(prev => ({ ...prev, current: Math.min(i + BATCH_SIZE, updatedTokens.length) }));
+
+      // Small delay between batches to avoid rate limiting
+      if (i + BATCH_SIZE < updatedTokens.length) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    // Update with only tokens that have 2+ holders
+    const filtered = updatedTokens.filter(t => t.holderCount && t.holderCount >= MIN_HOLDERS);
+    const sortedByHolders = filtered.sort((a, b) => b.holderCount - a.holderCount);
+
+    console.log(`ERC-20 holder counts: ${updatedTokens.length} checked, ${sortedByHolders.length} have ${MIN_HOLDERS}+ holders`);
+
+    setErc20Tokens(sortedByHolders);
     setLoading(false);
     setProgress({ show: false, stage: '', current: 0, total: 0, message: '', isProcessing: false, elapsedSeconds: 0 });
   };
@@ -1086,9 +1168,19 @@ export default function TestCommonAssetsPage() {
               {erc20Tokens.length > 0 && (
                 <div className="mb-6">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-semibold">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
                       🪙 ERC-20 Tokens ({erc20Tokens.length})
                       <span className="text-sm text-gray-400">• {selectedERC20s.size} selected</span>
+                      {!erc20Tokens.some(t => t.holderCount) && (
+                        <button
+                          onClick={fetchERC20HolderCounts}
+                          disabled={loading}
+                          className="px-2 py-1 bg-green-700 hover:bg-green-600 disabled:bg-gray-600 rounded text-xs"
+                          title="Load holder counts and filter tokens with 2+ holders"
+                        >
+                          📊 Load Holder Counts
+                        </button>
+                      )}
                     </h3>
                     <div className="flex gap-2">
                       <button
