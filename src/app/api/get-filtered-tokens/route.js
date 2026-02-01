@@ -32,10 +32,11 @@ export async function GET(request) {
     const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
     const chains = ['base', '0x2105']; // Try Base network formats (name first, then hex)
     const minHolders = 2;
-    const maxHolders = 10000;
+    // No upper limit - let users decide which tokens to analyze
+    // The analyze endpoint caps at 150k owners per token anyway
 
     console.log(`\n🔍 Fetching ERC-20 tokens for wallet: ${address}`);
-    console.log(`   Filter: ${minHolders}-${maxHolders} holders on Base Mainnet\n`);
+    console.log(`   Filter: ${minHolders}+ holders on Base Mainnet\n`);
 
     // Step 1: Get wallet's ERC-20 tokens
     let tokensData = null;
@@ -102,7 +103,7 @@ export async function GET(request) {
     // Log configuration on first use
     MoralisConfig.logConfig();
 
-    console.log(`\n📋 Pre-filtered ${spamCount} spam tokens, checking ${legitimateTokens.length} remaining (filter: ${minHolders}-${maxHolders} holders):\n`);
+    console.log(`\n📋 Pre-filtered ${spamCount} spam tokens, checking ${legitimateTokens.length} remaining (filter: ${minHolders}+ holders):\n`);
 
     // Step 2: Filter tokens by holder count (parallel batching for speed)
     // Keep concurrency at 4 to avoid rate limiting
@@ -130,8 +131,8 @@ export async function GET(request) {
             TTL.TOKEN_HOLDERS
           );
 
-          const passed = holderCount >= minHolders && holderCount <= maxHolders;
-          const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+          const passed = holderCount >= minHolders;
+          const reason = holderCount < minHolders ? 'too few' : 'passed';
 
           console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
 
@@ -169,7 +170,7 @@ export async function GET(request) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed`);
     console.log(`   🚫 ${spamCount} spam tokens pre-filtered`);
-    console.log(`   📊 ${legitimateTokens.length} checked → ${filteredTokens.length} passed (${minHolders}-${maxHolders} holders)`);
+    console.log(`   📊 ${legitimateTokens.length} checked → ${filteredTokens.length} passed (${minHolders}+ holders)`);
     
     if (filteredTokens.length > 0) {
       console.log(`\n   ✅ Tokens that PASSED filter:`);
@@ -180,7 +181,7 @@ export async function GET(request) {
         console.log(`      ... and ${filteredTokens.length - 10} more`);
       }
     } else {
-      console.log(`\n   ⚠️  NO TOKENS passed the ${minHolders}-${maxHolders} holder filter`);
+      console.log(`\n   ⚠️  NO TOKENS passed the ${minHolders}+ holder filter`);
       console.log(`   💡 This wallet may only hold very popular tokens (>10k holders) or spam tokens`);
     }
     
@@ -192,7 +193,7 @@ export async function GET(request) {
         chain,
         totalTokens: allTokens.length,
         filteredTokens: filteredTokens.sort((a, b) => b.holderCount - a.holderCount), // Sort by holder count (descending)
-        criteria: { minHolders, maxHolders },
+        criteria: { minHolders },
         estimates: {
           plan: MoralisConfig.plan,
           ifAllSelected: {
