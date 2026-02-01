@@ -83,14 +83,11 @@ export async function GET(request) {
     const allTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
 
     // Pre-filter obvious spam tokens BEFORE making holder count API calls
-    // This dramatically reduces the number of API calls needed
+    // Only filter clear scam patterns - be conservative to avoid filtering legitimate tokens
     const spamPatterns = [
-      /claim\s*on/i,           // "Claim on: ..."
-      /airdrop/i,              // Airdrop scams
+      /^claim\s*on[:\s]/i,     // "Claim on: ..." at start
+      /^visit\s+/i,            // "Visit ..." at start
       /^https?:\/\//i,         // Starts with URL
-      /\.(com|xyz|live|io|net|org|co|claim)\/?/i,  // Contains domain
-      /visit\s+/i,             // "Visit ..."
-      /free\s+/i,              // "Free ..."
     ];
 
     const isSpamToken = (token) => {
