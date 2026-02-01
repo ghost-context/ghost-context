@@ -384,13 +384,13 @@ export default function TestCommonAssetsPage() {
     try {
       let hasAssets = false;
 
-      // 1. Fetch ERC-20 tokens
+      // 1. Fetch ERC-20 tokens (use fast endpoint - no holder count filtering)
       setProgress(prev => ({ ...prev, current: 1, message: 'Fetching ERC-20 tokens...' }));
       try {
-        const erc20Response = await fetch(`/api/get-filtered-tokens?address=${targetAddress}`);
+        const erc20Response = await fetch(`/api/get-tokens-fast?address=${targetAddress}`);
         const erc20Data = await erc20Response.json();
-        if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
-          setErc20Tokens(erc20Data.filteredTokens);
+        if (erc20Response.ok && erc20Data.tokens?.length > 0) {
+          setErc20Tokens(erc20Data.tokens);
           hasAssets = true;
         }
       } catch (err) {
