@@ -2,6 +2,8 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { validateAddressParam } from '../../lib/validation.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
+import { fetchWithRetry } from '../../lib/fetch-with-retry.js';
+import { getCached, TTL } from '../../lib/cache.js';
 
 // Tell Next.js this route is always dynamic (uses request.url)
 export const dynamic = 'force-dynamic';
@@ -45,9 +47,9 @@ export async function GET(request) {
       console.log(`   Trying chain: ${chainFormat}`);
       console.log(`   URL: ${tokensUrl.replace(apiKey, 'API_KEY')}`);
       
-      const tokensResponse = await fetch(tokensUrl, {
+      const tokensResponse = await fetchWithRetry(tokensUrl, {
         headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-      });
+      }, { maxRetries: 2, baseDelayMs: 500 });
 
       if (tokensResponse.ok) {
         const data = await tokensResponse.json();
@@ -97,34 +99,40 @@ export async function GET(request) {
       CONCURRENCY,
       async (token) => {
         try {
-          const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
-          const holdersResponse = await fetch(holdersUrl, {
-            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-          });
+          // Use caching for holder counts (30 min TTL)
+          const holderCount = await getCached(
+            `holders:${token.token_address}:${chain}`,
+            async () => {
+              const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
+              const holdersResponse = await fetchWithRetry(holdersUrl, {
+                headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+              }, { maxRetries: 2, baseDelayMs: 500 });
 
-          if (holdersResponse.ok) {
-            const holdersData = await holdersResponse.json();
-            const holderCount = holdersData.totalHolders || 0;
+              if (!holdersResponse.ok) return 0;
+              const holdersData = await holdersResponse.json();
+              return holdersData.totalHolders || 0;
+            },
+            TTL.TOKEN_HOLDERS
+          );
 
-            const passed = holderCount >= minHolders && holderCount <= maxHolders;
-            const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+          const passed = holderCount >= minHolders && holderCount <= maxHolders;
+          const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
 
-            console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+          console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
 
-            // Add small delay after each request to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+          // Add small delay after each request to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
 
-            if (passed) {
-              return {
-                address: token.token_address,
-                symbol: token.symbol || 'UNKNOWN',
-                name: token.name || 'Unknown Token',
-                holderCount,
-                balance: token.balance_formatted || '0',
-                logo: token.logo || token.thumbnail || null,
-                usdValue: token.usd_value || null
-              };
-            }
+          if (passed) {
+            return {
+              address: token.token_address,
+              symbol: token.symbol || 'UNKNOWN',
+              name: token.name || 'Unknown Token',
+              holderCount,
+              balance: token.balance_formatted || '0',
+              logo: token.logo || token.thumbnail || null,
+              usdValue: token.usd_value || null
+            };
           }
         } catch (err) {
           console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
