@@ -126,8 +126,14 @@ export async function POST(request) {
     // 3. ANALYZE ERC-20 TOKENS (Moralis) - PARALLEL
     // ========================================
     const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    if (selectedERC20s.length > 0 && !apiKey) {
+      console.error('[analyze-combined-overlap] MORALIS_API_KEY not configured - ERC-20 analysis will fail');
+    }
     const fetchERC20Owners = async (token) => {
-      if (!apiKey) return { token, owners: [] };
+      if (!apiKey) {
+        console.error(`[ERC-20] No API key - skipping ${token.symbol}`);
+        return { token, owners: [] };
+      }
 
       const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
       const chain = '0x2105'; // Base network
@@ -164,8 +170,10 @@ export async function POST(request) {
           if (allOwners.length > 150000) break;
         } while (cursor);
 
+        console.log(`[ERC-20] ${token.symbol}: fetched ${allOwners.length} owners`);
         return { token, owners: allOwners };
       } catch (err) {
+        console.error(`[ERC-20] ${token.symbol}: fetch failed -`, err.message);
         return { token, owners: [] };
       }
     };
@@ -214,6 +222,9 @@ export async function POST(request) {
     }
 
     // Aggregate ERC-20 results
+    const totalERC20Owners = erc20Results.reduce((sum, r) => sum + r.owners.length, 0);
+    console.log(`[ERC-20] Total owners across ${erc20Results.length} tokens: ${totalERC20Owners}`);
+
     for (const { token, owners } of erc20Results) {
       for (const owner of owners) {
         addOverlap(owner.owner_address.toLowerCase(), {
