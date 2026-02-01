@@ -14,6 +14,13 @@ export async function POST(request) {
     const selectedPOAPs = body.poaps || [];
     const selectedERC20s = body.erc20s || [];
 
+    console.log(`\n[analyze-combined-overlap] Request received:`);
+    console.log(`  Source wallet: ${address}`);
+    console.log(`  NFTs: ${selectedNFTs.length}, POAPs: ${selectedPOAPs.length}, ERC-20s: ${selectedERC20s.length}`);
+    if (selectedERC20s.length > 0) {
+      console.log(`  ERC-20 tokens:`, selectedERC20s.map(t => `${t.symbol} (${t.address})`));
+    }
+
     // Validate address format
     const validationError = validateAddressParam(address);
     if (validationError) return validationError;

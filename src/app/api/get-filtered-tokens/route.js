@@ -108,10 +108,9 @@ export async function GET(request) {
     console.log(`\n📋 Pre-filtered ${spamCount} spam tokens, checking ${legitimateTokens.length} remaining (filter: ${minHolders}-${maxHolders} holders):\n`);
 
     // Step 2: Filter tokens by holder count (parallel batching for speed)
-    // Increased concurrency from 4 to 12 for faster processing
-    // With pre-filtering: ~100 tokens ÷ 12 concurrent × 150ms = ~1.25s
-    const CONCURRENCY = 12;
-    const BATCH_DELAY_MS = 25; // Reduced delay since we have fewer tokens
+    // Keep concurrency at 4 to avoid rate limiting
+    const CONCURRENCY = 4;
+    const BATCH_DELAY_MS = 50;
 
     const tokenResults = await processWithConcurrency(
       legitimateTokens,
