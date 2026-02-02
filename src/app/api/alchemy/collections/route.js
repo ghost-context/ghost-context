@@ -49,16 +49,44 @@ export async function GET(request) {
     // Create client with server-side keys
     const client = getServerAlchemyClient();
 
-    const collections = await client.getCollectionsForOwner(
-      address,
-      filter,
-      () => {}, // No progress callback for API route
-      networks
-    );
+    // Fetch networks one at a time to avoid timeout
+    // Return partial results if we run out of time
+    const TIMEOUT_MS = 8000;
+    const startTime = Date.now();
+
+    const allNetworks = networks || client.getAllNetworks();
+    const collections = [];
+    const completedNetworks = [];
+    let partial = false;
+
+    for (const network of allNetworks) {
+      // Check if we're running low on time
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        partial = true;
+        console.warn('[alchemy/collections] timeout after networks:', completedNetworks);
+        break;
+      }
+
+      try {
+        const networkCollections = await client.getCollectionsForOwner(
+          address,
+          filter,
+          () => {},
+          [network]
+        );
+        collections.push(...networkCollections);
+        completedNetworks.push(network);
+      } catch (err) {
+        console.error('[alchemy/collections] error on network:', network, err.message);
+        // Continue with other networks
+      }
+    }
 
     return Response.json({
       collections,
-      count: collections.length
+      count: collections.length,
+      partial,
+      completedNetworks
     });
 
   } catch (error) {
