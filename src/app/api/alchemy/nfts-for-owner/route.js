@@ -10,10 +10,17 @@ const NETWORK_MAP = {
   'ARB_MAINNET': Network.ARB_MAINNET,
   'OPT_MAINNET': Network.OPT_MAINNET,
   'BASE_MAINNET': Network.BASE_MAINNET,
+  // Lowercase aliases for compatibility
+  'eth-mainnet': Network.ETH_MAINNET,
+  'matic-mainnet': Network.MATIC_MAINNET,
+  'arb-mainnet': Network.ARB_MAINNET,
+  'opt-mainnet': Network.OPT_MAINNET,
+  'base-mainnet': Network.BASE_MAINNET,
 };
 
 if (typeof Network.ZORA_MAINNET !== 'undefined') {
   NETWORK_MAP['ZORA_MAINNET'] = Network.ZORA_MAINNET;
+  NETWORK_MAP['zora-mainnet'] = Network.ZORA_MAINNET;
 }
 
 const API_KEY_MAP = {
@@ -23,6 +30,13 @@ const API_KEY_MAP = {
   'OPT_MAINNET': () => process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY,
   'BASE_MAINNET': () => process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY,
   'ZORA_MAINNET': () => process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY,
+  // Lowercase aliases
+  'eth-mainnet': () => process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY,
+  'matic-mainnet': () => process.env.ALCHEMY_POLYGON_API_KEY || process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY,
+  'arb-mainnet': () => process.env.ALCHEMY_ARB_API_KEY || process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY,
+  'opt-mainnet': () => process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY,
+  'base-mainnet': () => process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY,
+  'zora-mainnet': () => process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY,
 };
 
 export async function GET(request) {

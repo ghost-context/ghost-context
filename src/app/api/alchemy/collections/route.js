@@ -8,16 +8,16 @@ export const dynamic = 'force-dynamic';
 
 // Use same network keys as other endpoints (ETH_MAINNET format)
 const NETWORK_CONFIG = {
-  'ETH_MAINNET': { network: Network.ETH_MAINNET, name: 'Ethereum', key: () => process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY },
-  'MATIC_MAINNET': { network: Network.MATIC_MAINNET, name: 'Polygon', key: () => process.env.ALCHEMY_POLYGON_API_KEY || process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
-  'ARB_MAINNET': { network: Network.ARB_MAINNET, name: 'Arbitrum', key: () => process.env.ALCHEMY_ARB_API_KEY || process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
-  'OPT_MAINNET': { network: Network.OPT_MAINNET, name: 'Optimism', key: () => process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
-  'BASE_MAINNET': { network: Network.BASE_MAINNET, name: 'Base', key: () => process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY },
+  'eth-mainnet': { network: Network.ETH_MAINNET, name: 'Ethereum', key: () => process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY },
+  'matic-mainnet': { network: Network.MATIC_MAINNET, name: 'Polygon', key: () => process.env.ALCHEMY_POLYGON_API_KEY || process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
+  'arb-mainnet': { network: Network.ARB_MAINNET, name: 'Arbitrum', key: () => process.env.ALCHEMY_ARB_API_KEY || process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
+  'opt-mainnet': { network: Network.OPT_MAINNET, name: 'Optimism', key: () => process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
+  'base-mainnet': { network: Network.BASE_MAINNET, name: 'Base', key: () => process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY },
 };
 
 // Add Zora if supported
 if (typeof Network.ZORA_MAINNET !== 'undefined') {
-  NETWORK_CONFIG['ZORA_MAINNET'] = { network: Network.ZORA_MAINNET, name: 'Zora', key: () => process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY };
+  NETWORK_CONFIG['zora-mainnet'] = { network: Network.ZORA_MAINNET, name: 'Zora', key: () => process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY };
 }
 
 // Fast collection fetching - uses getNftsForOwner which includes contract metadata
