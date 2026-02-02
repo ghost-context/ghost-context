@@ -3,8 +3,13 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
 import { validateAddressParam } from '../../lib/validation.js';
+import { validateOrigin } from '../../lib/csrf.js';
 
 export async function POST(request) {
+  // CSRF protection
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const body = await request.json();
     const address = (body.address || '').trim().toLowerCase();
