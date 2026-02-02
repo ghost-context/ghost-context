@@ -139,9 +139,9 @@ export async function POST(request) {
     );
 
   } catch (error) {
-    console.error('[ERC-20 Overlap] Error:', error);
+    console.error('[analyze-erc20-overlap] error', { message: error.message, stack: error.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
