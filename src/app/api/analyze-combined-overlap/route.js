@@ -79,7 +79,18 @@ export async function POST(request) {
     const fetchNFTOwners = async (nft) => {
       try {
         const { AlchemyMultichainClient } = await import('../../alchemy-multichain-client.js');
-        const alchemy = new AlchemyMultichainClient();
+        const { Network } = await import('alchemy-sdk');
+        // Use server-side API keys explicitly
+        const alchemy = new AlchemyMultichainClient(
+          { apiKey: process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY, network: Network.ETH_MAINNET },
+          {
+            [Network.MATIC_MAINNET]: { apiKey: process.env.ALCHEMY_POLYGON_API_KEY || process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
+            [Network.ARB_MAINNET]: { apiKey: process.env.ALCHEMY_ARB_API_KEY || process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
+            [Network.OPT_MAINNET]: { apiKey: process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
+            [Network.BASE_MAINNET]: { apiKey: process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY },
+            ...(typeof Network.ZORA_MAINNET !== 'undefined' ? { [Network.ZORA_MAINNET]: { apiKey: process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY } } : {}),
+          }
+        );
 
         let owners = [];
         let pageKey = undefined;
