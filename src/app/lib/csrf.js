@@ -3,6 +3,7 @@
 
 const ALLOWED_ORIGINS = [
   'https://ghost-context.vercel.app',
+  'https://ghost-context-git-sloan-updates-2-ghost-context.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
 ];
