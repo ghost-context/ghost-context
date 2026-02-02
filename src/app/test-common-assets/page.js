@@ -667,11 +667,11 @@ export default function TestCommonAssetsPage() {
         })
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        setError(data.error || 'Failed to analyze overlap');
+        const errorData = await response.json().catch(() => ({ error: 'Server error' }));
+        setError(errorData.error || 'Failed to analyze overlap');
       } else {
+        const data = await response.json();
         setKindredSpirits(data.kindredSpirits || []);
         setAnalysisResults(data);
         if ((data.kindredSpirits || []).length > 0) {
@@ -841,14 +841,14 @@ export default function TestCommonAssetsPage() {
         })
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        setError(data.error || 'Failed to analyze common assets');
+        const errorData = await response.json().catch(() => ({ error: 'Server error' }));
+        setError(errorData.error || 'Failed to analyze common assets');
       } else {
+        const data = await response.json();
         setKindredSpirits(data.kindredSpirits || []);
         setAnalysisResults(data);
-        
+
         if ((data.kindredSpirits || []).length > 0) {
           // Clear common asset selections and go back to step 3
           setSelectedCommonNFTs(new Set());
