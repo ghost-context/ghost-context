@@ -2,6 +2,8 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { validateAddressParam } from '../../lib/validation.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
+import { fetchWithRetry } from '../../lib/fetch-with-retry.js';
+import { getCached, TTL } from '../../lib/cache.js';
 
 // Tell Next.js this route is always dynamic (uses request.url)
 export const dynamic = 'force-dynamic';
@@ -30,10 +32,11 @@ export async function GET(request) {
     const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
     const chains = ['base', '0x2105']; // Try Base network formats (name first, then hex)
     const minHolders = 2;
-    const maxHolders = 10000;
+    // No upper limit - let users decide which tokens to analyze
+    // The analyze endpoint caps at 150k owners per token anyway
 
     console.log(`\n🔍 Fetching ERC-20 tokens for wallet: ${address}`);
-    console.log(`   Filter: ${minHolders}-${maxHolders} holders on Base Mainnet\n`);
+    console.log(`   Filter: ${minHolders}+ holders on Base Mainnet\n`);
 
     // Step 1: Get wallet's ERC-20 tokens
     let tokensData = null;
@@ -45,9 +48,9 @@ export async function GET(request) {
       console.log(`   Trying chain: ${chainFormat}`);
       console.log(`   URL: ${tokensUrl.replace(apiKey, 'API_KEY')}`);
       
-      const tokensResponse = await fetch(tokensUrl, {
+      const tokensResponse = await fetchWithRetry(tokensUrl, {
         headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-      });
+      }, { maxRetries: 2, baseDelayMs: 500 });
 
       if (tokensResponse.ok) {
         const data = await tokensResponse.json();
@@ -80,51 +83,72 @@ export async function GET(request) {
     // Handle both response formats: direct array or {result: [...]}
     const allTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
 
+    // Pre-filter obvious spam tokens BEFORE making holder count API calls
+    // Only filter clear scam patterns - be conservative to avoid filtering legitimate tokens
+    const spamPatterns = [
+      /^claim\s*on[:\s]/i,     // "Claim on: ..." at start
+      /^visit\s+/i,            // "Visit ..." at start
+      /^https?:\/\//i,         // Starts with URL
+    ];
+
+    const isSpamToken = (token) => {
+      const name = token.name || '';
+      const symbol = token.symbol || '';
+      return spamPatterns.some(pattern => pattern.test(name) || pattern.test(symbol));
+    };
+
+    const legitimateTokens = allTokens.filter(token => !isSpamToken(token));
+    const spamCount = allTokens.length - legitimateTokens.length;
+
     // Log configuration on first use
     MoralisConfig.logConfig();
 
-    console.log(`\n📋 Checking ${allTokens.length} ERC-20 tokens (filter: ${minHolders}-${maxHolders} holders):\n`);
+    console.log(`\n📋 Pre-filtered ${spamCount} spam tokens, checking ${legitimateTokens.length} remaining (filter: ${minHolders}+ holders):\n`);
 
     // Step 2: Filter tokens by holder count (parallel batching for speed)
-    // Process 4 tokens concurrently to stay within Vercel's 15s timeout
-    // 227 tokens × 150ms sequential = 34s (TIMEOUT)
-    // 227 tokens ÷ 4 concurrent × 150ms = ~8.5s (OK)
+    // Keep concurrency at 4 to avoid rate limiting
     const CONCURRENCY = 4;
-    const BATCH_DELAY_MS = 50; // Small delay between batches to respect rate limits
+    const BATCH_DELAY_MS = 50;
 
     const tokenResults = await processWithConcurrency(
-      allTokens,
+      legitimateTokens,
       CONCURRENCY,
       async (token) => {
         try {
-          const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
-          const holdersResponse = await fetch(holdersUrl, {
-            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
-          });
+          // Use caching for holder counts (30 min TTL)
+          const holderCount = await getCached(
+            `holders:${token.token_address}:${chain}`,
+            async () => {
+              const holdersUrl = `${baseUrl}/erc20/${token.token_address}/holders?chain=${chain}`;
+              const holdersResponse = await fetchWithRetry(holdersUrl, {
+                headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+              }, { maxRetries: 2, baseDelayMs: 500 });
 
-          if (holdersResponse.ok) {
-            const holdersData = await holdersResponse.json();
-            const holderCount = holdersData.totalHolders || 0;
+              if (!holdersResponse.ok) return 0;
+              const holdersData = await holdersResponse.json();
+              return holdersData.totalHolders || 0;
+            },
+            TTL.TOKEN_HOLDERS
+          );
 
-            const passed = holderCount >= minHolders && holderCount <= maxHolders;
-            const reason = holderCount < minHolders ? 'too few' : holderCount > maxHolders ? 'too many' : 'passed';
+          const passed = holderCount >= minHolders;
+          const reason = holderCount < minHolders ? 'too few' : 'passed';
 
-            console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
+          console.log(`  ${passed ? '✅' : '❌'} ${token.symbol}: ${holderCount.toLocaleString()} holders (${reason})`);
 
-            // Add small delay after each request to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+          // Add small delay after each request to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
 
-            if (passed) {
-              return {
-                address: token.token_address,
-                symbol: token.symbol || 'UNKNOWN',
-                name: token.name || 'Unknown Token',
-                holderCount,
-                balance: token.balance_formatted || '0',
-                logo: token.logo || token.thumbnail || null,
-                usdValue: token.usd_value || null
-              };
-            }
+          if (passed) {
+            return {
+              address: token.token_address,
+              symbol: token.symbol || 'UNKNOWN',
+              name: token.name || 'Unknown Token',
+              holderCount,
+              balance: token.balance_formatted || '0',
+              logo: token.logo || token.thumbnail || null,
+              usdValue: token.usd_value || null
+            };
           }
         } catch (err) {
           console.log(`  ⚠️ ${token.symbol}: failed to fetch holder count`);
@@ -144,8 +168,9 @@ export async function GET(request) {
     const costEstimate = MoralisConfig.estimateCost(filteredTokens.length, avgHolders);
 
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed filter (${minHolders}-${maxHolders} holders)`);
-    console.log(`   📊 ${filteredTokens.length} passed / ${allTokens.length - filteredTokens.length} filtered out`);
+    console.log(`✅ ERC-20 Filtering Results: ${allTokens.length} total → ${filteredTokens.length} passed`);
+    console.log(`   🚫 ${spamCount} spam tokens pre-filtered`);
+    console.log(`   📊 ${legitimateTokens.length} checked → ${filteredTokens.length} passed (${minHolders}+ holders)`);
     
     if (filteredTokens.length > 0) {
       console.log(`\n   ✅ Tokens that PASSED filter:`);
@@ -156,7 +181,7 @@ export async function GET(request) {
         console.log(`      ... and ${filteredTokens.length - 10} more`);
       }
     } else {
-      console.log(`\n   ⚠️  NO TOKENS passed the ${minHolders}-${maxHolders} holder filter`);
+      console.log(`\n   ⚠️  NO TOKENS passed the ${minHolders}+ holder filter`);
       console.log(`   💡 This wallet may only hold very popular tokens (>10k holders) or spam tokens`);
     }
     
@@ -168,7 +193,7 @@ export async function GET(request) {
         chain,
         totalTokens: allTokens.length,
         filteredTokens: filteredTokens.sort((a, b) => b.holderCount - a.holderCount), // Sort by holder count (descending)
-        criteria: { minHolders, maxHolders },
+        criteria: { minHolders },
         estimates: {
           plan: MoralisConfig.plan,
           ifAllSelected: {

@@ -1,8 +1,7 @@
 import { useEffect, useState, useContext, useRef } from "react";
-import { Network } from "alchemy-sdk";
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
 import { NeynarClient } from '../neynar';
 import { processWithConcurrency } from '../lib/concurrency';
+import * as AlchemyAPI from '../lib/alchemy-api';
 
 import NftModal from "./NftModal";
 import { saveAs } from 'file-saver';
@@ -20,7 +19,6 @@ const viemClient = createPublicClient({
   transport: http(),
 });
 
-const alchemy = new AlchemyMultichainClient();
 const airstack = new NeynarClient();
 
 Modal.setAppElement('#root');
@@ -68,12 +66,12 @@ const KindredSpiritsList = () => {
     let ensNames = [];
     const walletAddress = address;
     const ensContractAddress = "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85";
-    const nfts = await alchemy.nft.getNftsForOwner(walletAddress, {
+    const nfts = await AlchemyAPI.getNftsForOwner(walletAddress, {
       contractAddresses: [ensContractAddress],
     });
 
     for (const { nftAddress, nftNetwork } of contractsInCommon) {
-      const response = await alchemy.forNetwork(nftNetwork).nft.getContractMetadata(nftAddress).catch(error => {
+      const response = await AlchemyAPI.getContractMetadata(nftNetwork, nftAddress).catch(error => {
         console.error(`Error getting contract metadata for ${nftAddress}: ${error.message}`);
         return {};
       })
@@ -180,7 +178,7 @@ const KindredSpiritsList = () => {
         } else {
           let pageKey = undefined;
           do {
-            const resp = await alchemy.forNetwork(nftNetwork).nft.getOwnersForContract(nftAddress, { pageKey }).catch(() => null);
+            const resp = await AlchemyAPI.getOwnersForContract(nftNetwork, nftAddress, pageKey).catch(() => null);
             const batch = resp && Array.isArray(resp.owners) ? resp.owners : [];
             collectionOwners.push(...batch);
             progressLocal += batch.length;

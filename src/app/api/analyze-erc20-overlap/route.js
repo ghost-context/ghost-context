@@ -3,8 +3,13 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
 import { validateAddressParam } from '../../lib/validation.js';
+import { validateOrigin } from '../../lib/csrf.js';
 
 export async function POST(request) {
+  // CSRF protection
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const body = await request.json();
     const address = (body.address || '').trim().toLowerCase();
@@ -21,7 +26,7 @@ export async function POST(request) {
       );
     }
 
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const apiKey = process.env.MORALIS_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Moralis API key not configured' }),
@@ -139,9 +144,9 @@ export async function POST(request) {
     );
 
   } catch (error) {
-    console.error('[ERC-20 Overlap] Error:', error);
+    console.error('[analyze-erc20-overlap] error', { message: error.message, stack: error.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }

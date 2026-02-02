@@ -4,12 +4,9 @@ import { useAccount } from 'wagmi';
 import { EnsContext } from './context/EnsContext';
 import { KindredButtonContext } from './context/KindredButtonContext';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
+import * as AlchemyAPI from '../lib/alchemy-api';
 
 import Modal from 'react-modal';
-
-// Create alchemy client once at module level (not per render)
-const alchemy = new AlchemyMultichainClient();
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -50,19 +47,21 @@ export default function NftTableList() {
   const inboundFetchPendingRef = useRef(false);
 
   useEffect(() => {
-    const networkMapping = alchemy.getNetworkMapping();
-    const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
-    setNetworks(networks);
+    AlchemyAPI.getNetworkMapping().then(networkMapping => {
+      const networks = Object.entries(networkMapping).map(([key, value]) => ({ key, value }));
+      setNetworks(networks);
+    }).catch(() => {
+      // Fallback to empty networks on error
+      setNetworks([]);
+    });
   }, []);
 
   const fetchCollections = async (addressToFetch, filter) => {
     setProgress(0)
-    let fetchCount=0
     setIsLoadingModal(true);
-    const uniqueCollections = await alchemy.getCollectionsForOwner(addressToFetch, filter, (count) => {
-      fetchCount += count
-      setProgress(fetchCount)
-    })
+    // Server-side route doesn't support progress callback, so we just wait for the result
+    const uniqueCollections = await AlchemyAPI.getCollectionsForOwner(addressToFetch, filter);
+    setProgress(uniqueCollections.length);
     setPageKey(null);
     setTotalOwnedCollections(uniqueCollections.length.toLocaleString());
     setTotalCollections(uniqueCollections);
@@ -213,7 +212,7 @@ export default function NftTableList() {
       // Resolve ENS name to hex address if needed
       if (typeof addressToFetch === 'string' && !addressToFetch.startsWith('0x')) {
         try {
-          const resolved = await alchemy.core.resolveName(addressToFetch);
+          const resolved = await AlchemyAPI.resolveName(addressToFetch);
           if (resolved) addressToFetch = resolved;
         } catch {}
       }
@@ -229,7 +228,7 @@ export default function NftTableList() {
       for (let i = 0; i < missing.length; i += BATCH_SIZE) {
         const batch = missing.slice(i, i + BATCH_SIZE);
         const results = await Promise.all(batch.map(async (c) => {
-          const ts = await alchemy.getLatestInboundTransferTimestamp(c.network, c.contract_address, addressToFetch).catch(() => null);
+          const ts = await AlchemyAPI.getLatestInboundTransferTimestamp(c.network, c.contract_address, addressToFetch).catch(() => null);
           return [c.contract_address, ts];
         }));
         for (const [k, v] of results) {
@@ -271,7 +270,7 @@ export default function NftTableList() {
       for (let i = 0; i < missing.length; i += BATCH_SIZE) {
         const batch = missing.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.all(batch.map(async (c) => {
-          const count = await alchemy.getOwnersCountForContract(c.network, c.contract_address, 25000);
+          const count = await AlchemyAPI.getOwnersCountForContract(c.network, c.contract_address, 25000);
           return [c.contract_address, count];
         }));
         allResults.push(...batchResults);

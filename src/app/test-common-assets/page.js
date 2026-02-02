@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { NeynarClient } from '../neynar';
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
+import * as AlchemyAPI from '../lib/alchemy-api.js';
 import { PoapClient } from '../poap-client';
 
 const neynar = new NeynarClient();
@@ -84,6 +84,134 @@ const TestSocialCard = ({ address, count }) => {
     </div>
   );
 };
+
+// Helper: Fetch all assets for a wallet in parallel
+// networks: optional array of networks to query (e.g., ['ETH_MAINNET', 'BASE_MAINNET'])
+// If not provided, queries all configured networks (slower)
+async function fetchWalletAssets(address, { networks = null } = {}) {
+  const poapClient = new PoapClient();
+
+  const [nftsResult, poapsResult, erc20sResult] = await Promise.allSettled([
+    // NFTs (if networks provided, only query those - much faster)
+    (async () => {
+      try {
+        const collections = await AlchemyAPI.getCollectionsForOwner(address, 'relevant', networks);
+        return collections
+          .filter(nft => nft.network !== 'POAP' && !nft.network?.toLowerCase().includes('poap'))
+          .map(nft => ({
+            id: `${nft.network}-${nft.contract_address}`,
+            address: nft.contract_address,
+            network: nft.network,
+            name: nft.name || 'Unknown Collection',
+            image: nft.image_small_url || nft.image
+          }));
+      } catch (err) {
+        console.warn(`Failed to fetch NFTs for ${address}:`, err.message);
+        return [];
+      }
+    })(),
+
+    // POAPs
+    (async () => {
+      try {
+        const poapData = await poapClient.scanAddress(address);
+        const poaps = poapData?.events || poapData?.poaps || [];
+        const unique = new Map();
+        for (const poap of poaps) {
+          const eventId = String(poap.id || poap.event?.id || poap.eventId);
+          if (eventId && !unique.has(eventId)) {
+            unique.set(eventId, {
+              eventId,
+              name: poap.name || poap.event?.name || 'Unknown Event',
+              image: poap.image_url || poap.event?.image_url || poap.imageUrl
+            });
+          }
+        }
+        return Array.from(unique.values());
+      } catch (err) {
+        console.warn(`Failed to fetch POAPs for ${address}:`, err.message);
+        return [];
+      }
+    })(),
+
+    // ERC-20s (use fast endpoint - no holder count filtering needed for intersection)
+    (async () => {
+      try {
+        const res = await fetch(`/api/get-tokens-fast?address=${address}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return (data.tokens || []).map(t => ({
+          address: t.address,
+          symbol: t.symbol,
+          name: t.name,
+          logo: t.logo
+        }));
+      } catch (err) {
+        console.warn(`Failed to fetch ERC-20s for ${address}:`, err.message);
+        return [];
+      }
+    })()
+  ]);
+
+  return {
+    address,
+    nfts: nftsResult.status === 'fulfilled' ? nftsResult.value : [],
+    poaps: poapsResult.status === 'fulfilled' ? poapsResult.value : [],
+    erc20s: erc20sResult.status === 'fulfilled' ? erc20sResult.value : []
+  };
+}
+
+// Helper: Compute intersection of assets across multiple wallets
+function computeIntersection(wallets) {
+  if (wallets.length === 0) {
+    return { nfts: [], poaps: [], erc20s: [] };
+  }
+
+  if (wallets.length === 1) {
+    return {
+      nfts: wallets[0].nfts,
+      poaps: wallets[0].poaps,
+      erc20s: wallets[0].erc20s
+    };
+  }
+
+  // Sort wallets by total asset count (smallest first for efficiency)
+  const sorted = [...wallets].sort((a, b) =>
+    (a.nfts.length + a.poaps.length + a.erc20s.length) -
+    (b.nfts.length + b.poaps.length + b.erc20s.length)
+  );
+
+  // Start with smallest wallet's assets as candidates
+  let candidateNFTs = new Set(sorted[0].nfts.map(n => n.id));
+  let candidatePOAPs = new Set(sorted[0].poaps.map(p => p.eventId));
+  let candidateERC20s = new Set(sorted[0].erc20s.map(t => t.address.toLowerCase()));
+
+  // Filter through remaining wallets
+  for (let i = 1; i < sorted.length; i++) {
+    const wallet = sorted[i];
+
+    const walletNFTs = new Set(wallet.nfts.map(n => n.id));
+    const walletPOAPs = new Set(wallet.poaps.map(p => p.eventId));
+    const walletERC20s = new Set(wallet.erc20s.map(t => t.address.toLowerCase()));
+
+    // Intersect each asset type
+    candidateNFTs = new Set([...candidateNFTs].filter(x => walletNFTs.has(x)));
+    candidatePOAPs = new Set([...candidatePOAPs].filter(x => walletPOAPs.has(x)));
+    candidateERC20s = new Set([...candidateERC20s].filter(x => walletERC20s.has(x)));
+
+    // Early termination if nothing left
+    if (candidateNFTs.size === 0 && candidatePOAPs.size === 0 && candidateERC20s.size === 0) {
+      break;
+    }
+  }
+
+  // Return full objects from smallest wallet (preserves metadata)
+  return {
+    nfts: sorted[0].nfts.filter(n => candidateNFTs.has(n.id)),
+    poaps: sorted[0].poaps.filter(p => candidatePOAPs.has(p.eventId)),
+    erc20s: sorted[0].erc20s.filter(t => candidateERC20s.has(t.address.toLowerCase()))
+  };
+}
 
 export default function TestCommonAssetsPage() {
   const [walletAddress, setWalletAddress] = useState('0x1b4a302D15412655877d86ae82823D8F6d085ddD');
@@ -256,14 +384,31 @@ export default function TestCommonAssetsPage() {
     try {
       let hasAssets = false;
 
-      // 1. Fetch ERC-20 tokens
+      // 1. Fetch ERC-20 tokens (fast endpoint - no holder counts)
+      // Holder counts can be loaded separately via "Load Holder Counts" button
       setProgress(prev => ({ ...prev, current: 1, message: 'Fetching ERC-20 tokens...' }));
       try {
-        const erc20Response = await fetch(`/api/get-filtered-tokens?address=${targetAddress}`);
+        const erc20Response = await fetch(`/api/get-tokens-fast?address=${targetAddress}`);
         const erc20Data = await erc20Response.json();
-        if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
-          setErc20Tokens(erc20Data.filteredTokens);
-          hasAssets = true;
+        if (erc20Response.ok && erc20Data.tokens?.length > 0) {
+          // Pre-filter obvious spam tokens (same patterns as server-side filtering)
+          const spamPatterns = [
+            /^claim\s*on[:\s]/i,     // "Claim on: ..." at start
+            /^visit\s+/i,            // "Visit ..." at start
+            /^https?:\/\//i,         // Starts with URL
+          ];
+          const isSpamToken = (token) => {
+            const name = token.name || '';
+            const symbol = token.symbol || '';
+            return spamPatterns.some(pattern => pattern.test(name) || pattern.test(symbol));
+          };
+          const legitimateTokens = erc20Data.tokens.filter(token => !isSpamToken(token));
+          console.log(`ERC-20: ${erc20Data.tokens.length} tokens found, ${erc20Data.tokens.length - legitimateTokens.length} spam filtered, ${legitimateTokens.length} remaining`);
+
+          if (legitimateTokens.length > 0) {
+            setErc20Tokens(legitimateTokens);
+            hasAssets = true;
+          }
         }
       } catch (err) {
         console.warn('Failed to fetch ERC-20 tokens:', err.message);
@@ -272,8 +417,7 @@ export default function TestCommonAssetsPage() {
       // 2. Fetch NFT Collections
       setProgress(prev => ({ ...prev, current: 2, message: 'Fetching NFT collections...' }));
       try {
-        const alchemy = new AlchemyMultichainClient();
-        const collections = await alchemy.getCollectionsForOwner(targetAddress, 'relevant');
+        const collections = await AlchemyAPI.getCollectionsForOwner(targetAddress, 'relevant');
         
         // Extract POAPs
         const alchemyPOAPs = collections.filter(nft => 
@@ -391,16 +535,15 @@ export default function TestCommonAssetsPage() {
       elapsedSeconds: 0
     });
 
-    const alchemy = new AlchemyMultichainClient();
     const BATCH_SIZE = 10;
     const updatedNFTs = [...nftCollections];
 
     for (let i = 0; i < updatedNFTs.length; i += BATCH_SIZE) {
       const batch = updatedNFTs.slice(i, i + BATCH_SIZE);
-      
+
       await Promise.all(batch.map(async (nft, idx) => {
         try {
-          const ownerCount = await alchemy.getOwnersCountForContract(nft.network, nft.address);
+          const ownerCount = await AlchemyAPI.getOwnersCountForContract(nft.network, nft.address);
           updatedNFTs[i + idx].ownerCount = ownerCount;
         } catch (err) {
           // Silently skip errors
@@ -411,6 +554,74 @@ export default function TestCommonAssetsPage() {
     }
 
     setNftCollections(updatedNFTs);
+    setLoading(false);
+    setProgress({ show: false, stage: '', current: 0, total: 0, message: '', isProcessing: false, elapsedSeconds: 0 });
+  };
+
+  // Fetch ERC-20 holder counts (batch processing) - filters tokens with <2 holders
+  const fetchERC20HolderCounts = async () => {
+    if (erc20Tokens.length === 0) return;
+
+    setLoading(true);
+    setProgress({
+      show: true,
+      stage: 'Fetching Holder Counts',
+      current: 0,
+      total: erc20Tokens.length,
+      message: 'Loading holder counts for ERC-20 tokens...',
+      isProcessing: false,
+      elapsedSeconds: 0
+    });
+
+    const apiKey = process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
+    const chain = '0x2105'; // Base network
+    const BATCH_SIZE = 4; // Lower concurrency for Moralis rate limits
+    const BATCH_DELAY_MS = 100; // Small delay between batches
+    const MIN_HOLDERS = 2;
+
+    const updatedTokens = [...erc20Tokens];
+    const tokensToKeep = [];
+
+    for (let i = 0; i < updatedTokens.length; i += BATCH_SIZE) {
+      const batch = updatedTokens.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(batch.map(async (token, idx) => {
+        try {
+          const holdersUrl = `${baseUrl}/erc20/${token.address}/holders?chain=${chain}`;
+          const response = await fetch(holdersUrl, {
+            headers: { 'Accept': 'application/json', 'X-API-Key': apiKey }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const holderCount = data.totalHolders || 0;
+            updatedTokens[i + idx].holderCount = holderCount;
+
+            if (holderCount >= MIN_HOLDERS) {
+              tokensToKeep.push(updatedTokens[i + idx]);
+            }
+          }
+        } catch (err) {
+          // Silently skip errors - token won't have holderCount
+        }
+      }));
+
+      setProgress(prev => ({ ...prev, current: Math.min(i + BATCH_SIZE, updatedTokens.length) }));
+
+      // Small delay between batches to avoid rate limiting
+      if (i + BATCH_SIZE < updatedTokens.length) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    // Update with only tokens that have 2+ holders
+    const filtered = updatedTokens.filter(t => t.holderCount && t.holderCount >= MIN_HOLDERS);
+    const sortedByHolders = filtered.sort((a, b) => b.holderCount - a.holderCount);
+
+    console.log(`ERC-20 holder counts: ${updatedTokens.length} checked, ${sortedByHolders.length} have ${MIN_HOLDERS}+ holders`);
+
+    setErc20Tokens(sortedByHolders);
     setLoading(false);
     setProgress({ show: false, stage: '', current: 0, total: 0, message: '', isProcessing: false, elapsedSeconds: 0 });
   };
@@ -657,12 +868,11 @@ export default function TestCommonAssetsPage() {
     }
   };
 
-  // Step 3: Find common assets among selected spirits
+  // Step 3: Find common assets among selected spirits (OPTIMIZED)
   const findCommonAssets = async () => {
     // Determine minimum required selections based on includeSourceWallet
     const minRequired = includeSourceWallet ? 1 : 2;
-    const totalWallets = includeSourceWallet ? selectedSpirits.size + 1 : selectedSpirits.size;
-    
+
     if (selectedSpirits.size < minRequired) {
       setError(`Please select at least ${minRequired} wallet${minRequired > 1 ? 's' : ''}`);
       return;
@@ -672,252 +882,131 @@ export default function TestCommonAssetsPage() {
     setError('');
     setCommonAssets(null);
 
-    // Build list of addresses to analyze
-    const selectedAddresses = Array.from(selectedSpirits);
-    if (includeSourceWallet) {
-      selectedAddresses.unshift(walletAddress); // Add source wallet at beginning
-    }
-    
-    const totalSteps = selectedAddresses.length * 3;
+    const spiritsToFetch = Array.from(selectedSpirits);
 
     setProgress({
       show: true,
-      stage: 'Fetching Assets',
+      stage: 'Finding Common Assets',
       current: 0,
-      total: totalSteps,
-      message: `Fetching assets for ${selectedAddresses.length} wallets...`,
-      isProcessing: false,
+      total: 1,
+      message: `Fetching assets for ${spiritsToFetch.length} kindred spirit${spiritsToFetch.length !== 1 ? 's' : ''}...`,
+      isProcessing: true,
       elapsedSeconds: 0
     });
 
     try {
-      const alchemy = new AlchemyMultichainClient();
-      const poapClient = new PoapClient();
-      
-      // Fetch assets for all selected wallets
-      const walletsAssets = [];
-      let currentStep = 0;
+      // Extract networks from source wallet's NFTs (only query these for kindred spirits)
+      // This reduces from 5 networks to only the ones that matter, e.g., 1-2 networks
+      const relevantNetworks = [...new Set(nftCollections.map(nft => nft.network))];
+      console.log(`Optimizing NFT fetch: only querying ${relevantNetworks.length} networks:`, relevantNetworks);
 
-      for (let walletIndex = 0; walletIndex < selectedAddresses.length; walletIndex++) {
-        const address = selectedAddresses[walletIndex];
-        const walletNumber = walletIndex + 1;
-        const walletAssets = { address, nfts: [], poaps: [], erc20s: [] };
+      // Fetch all kindred spirits' assets in PARALLEL
+      const results = await Promise.allSettled(
+        spiritsToFetch.map(address => fetchWalletAssets(address, { networks: relevantNetworks.length > 0 ? relevantNetworks : null }))
+      );
 
-        // Fetch NFTs
-        currentStep++;
-        setProgress(prev => ({ ...prev, current: currentStep, message: `Fetching NFTs for wallet ${walletNumber}/${selectedAddresses.length}...` }));
-        try {
-          const collections = await alchemy.getCollectionsForOwner(address, 'relevant');
-          const nftOnly = collections.filter(nft => 
-            nft.network !== 'POAP' && !nft.network?.toLowerCase().includes('poap')
-          );
-          walletAssets.nfts = nftOnly.map(nft => ({
-            id: `${nft.network}-${nft.contract_address}`,
-            address: nft.contract_address,
-            network: nft.network,
-            name: nft.name || 'Unknown Collection',
-            image: nft.image_small_url || nft.image
-          }));
-        } catch (err) {
-          console.warn(`Failed to fetch NFTs for ${address}:`, err.message);
+      // Separate successes from failures
+      const successfulFetches = [];
+      const failedAddresses = [];
+
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          successfulFetches.push(result.value);
+        } else {
+          failedAddresses.push(spiritsToFetch[idx]);
+          console.warn(`Failed to fetch assets for ${spiritsToFetch[idx]}:`, result.reason);
         }
-
-        // Fetch POAPs
-        currentStep++;
-        setProgress(prev => ({ ...prev, current: currentStep, message: `Fetching POAPs for wallet ${walletNumber}/${selectedAddresses.length}...` }));
-        try {
-          const poapData = await poapClient.scanAddress(address);
-          console.log(`POAP data for ${address.slice(0, 8)}...`, poapData);
-          // API returns 'events' not 'poaps'
-          const poaps = poapData?.events || poapData?.poaps || [];
-          console.log(`Found ${poaps.length} POAPs for ${address.slice(0, 8)}...`);
-          
-          const uniqueEvents = new Map();
-          for (const poap of poaps) {
-            // API returns flat structure: { id, name, image_url }
-            const eventId = poap.id || poap.event?.id || poap.eventId;
-            if (eventId && !uniqueEvents.has(String(eventId))) {
-              uniqueEvents.set(String(eventId), {
-                eventId: String(eventId),
-                name: poap.name || poap.event?.name || 'Unknown Event',
-                image: poap.image_url || poap.event?.image_url || poap.imageUrl
-              });
-            }
-          }
-          walletAssets.poaps = Array.from(uniqueEvents.values());
-          console.log(`Unique POAP events for ${address.slice(0, 8)}...:`, walletAssets.poaps.length);
-        } catch (err) {
-          console.error(`Failed to fetch POAPs for ${address}:`, err.message);
-          console.error('Full error:', err);
-        }
-
-        // Fetch ERC-20s
-        currentStep++;
-        setProgress(prev => ({ ...prev, current: currentStep, message: `Fetching ERC-20s for wallet ${walletNumber}/${selectedAddresses.length}...` }));
-        try {
-          const erc20Response = await fetch(`/api/get-filtered-tokens?address=${address}`);
-          const erc20Data = await erc20Response.json();
-          if (erc20Response.ok && erc20Data.filteredTokens?.length > 0) {
-            walletAssets.erc20s = erc20Data.filteredTokens.map(token => ({
-              address: token.address,
-              symbol: token.symbol,
-              name: token.name,
-              logo: token.logo,
-              holderCount: token.holderCount // Preserve holder count for display
-            }));
-          }
-        } catch (err) {
-          console.warn(`Failed to fetch ERC-20s for ${address}:`, err.message);
-        }
-
-        walletsAssets.push(walletAssets);
-      }
-
-      // Calculate strict intersection
-      setProgress({
-        show: true,
-        stage: 'Calculating Intersection',
-        current: 0,
-        total: 1,
-        message: 'Finding assets common to all selected wallets...',
-        isProcessing: true,
-        elapsedSeconds: 0
       });
 
-      // Debug: Log what we fetched for each wallet
-      console.log('🔍 Common Assets Analysis - Fetched Assets:');
-      walletsAssets.forEach((wallet, idx) => {
+      // Warn about failures
+      if (failedAddresses.length > 0) {
+        console.warn('Failed to fetch assets for wallets:', failedAddresses);
+      }
+
+      // Need at least 1 successful fetch (or source wallet if included)
+      if (successfulFetches.length === 0 && !includeSourceWallet) {
+        setError('Failed to fetch assets for all selected wallets');
+        setLoading(false);
+        setProgress({ show: false, stage: '', current: 0, total: 0, message: '', isProcessing: false, elapsedSeconds: 0 });
+        return;
+      }
+
+      setProgress(prev => ({
+        ...prev,
+        message: 'Calculating intersection...'
+      }));
+
+      // Build wallet list for intersection
+      // Source wallet uses ALREADY LOADED assets (no re-fetch!)
+      const allWallets = [];
+
+      if (includeSourceWallet) {
+        allWallets.push({
+          address: walletAddress,
+          nfts: nftCollections.map(nft => ({
+            id: nft.id,
+            address: nft.address,
+            network: nft.network,
+            name: nft.name,
+            image: nft.image
+          })),
+          poaps: poapEvents.map(poap => ({
+            eventId: poap.eventId,
+            name: poap.name,
+            image: poap.image
+          })),
+          erc20s: erc20Tokens.map(token => ({
+            address: token.address,
+            symbol: token.symbol,
+            name: token.name,
+            logo: token.logo,
+            holderCount: token.holderCount
+          }))
+        });
+      }
+
+      allWallets.push(...successfulFetches);
+
+      // Debug logging
+      console.log('🔍 Common Assets Analysis - Wallets to intersect:');
+      allWallets.forEach((wallet, idx) => {
         console.log(`Wallet ${idx + 1} (${wallet.address.slice(0, 8)}...):`, {
           nfts: wallet.nfts.length,
           poaps: wallet.poaps.length,
-          erc20s: wallet.erc20s.length,
-          erc20Symbols: wallet.erc20s.map(t => t.symbol).join(', ')
+          erc20s: wallet.erc20s.length
         });
       });
 
-      // NFT intersection - optimized: start with smallest set
-      const nftSets = walletsAssets.map(w => new Set(w.nfts.map(nft => nft.id)));
-      const sortedNFTSets = [...nftSets].sort((a, b) => a.size - b.size); // Smallest first
-      const nftIntersectionIds = sortedNFTSets.reduce((acc, set) => 
-        new Set([...acc].filter(x => set.has(x)))
-      );
-      // Get full objects from the wallet with smallest NFT count
-      const smallestNFTWallet = walletsAssets.reduce((min, w) => 
-        w.nfts.length < min.nfts.length ? w : min
-      );
-      const commonNFTs = smallestNFTWallet.nfts.filter(nft => nftIntersectionIds.has(nft.id));
+      // Compute intersection using helper
+      const common = computeIntersection(allWallets);
 
-      // POAP intersection - optimized: start with smallest set
-      const poapSets = walletsAssets.map(w => new Set(w.poaps.map(p => p.eventId)));
-      const sortedPOAPSets = [...poapSets].sort((a, b) => a.size - b.size); // Smallest first
-      const poapIntersectionIds = sortedPOAPSets.reduce((acc, set) => 
-        new Set([...acc].filter(x => set.has(x)))
-      );
-      // Get full objects from the wallet with smallest POAP count
-      const smallestPOAPWallet = walletsAssets.reduce((min, w) => 
-        w.poaps.length < min.poaps.length ? w : min
-      );
-      const commonPOAPs = smallestPOAPWallet.poaps.filter(poap => poapIntersectionIds.has(poap.eventId));
-
-      // ERC-20 intersection - optimized: start with smallest set
-      const erc20Sets = walletsAssets.map(w => new Set(w.erc20s.map(t => t.address.toLowerCase())));
-      console.log('🪙 ERC-20 Sets:', erc20Sets.map((s, idx) => ({
-        wallet: idx + 1,
-        count: s.size,
-        addresses: Array.from(s)
-      })));
-      
-      const sortedERC20Sets = [...erc20Sets].sort((a, b) => a.size - b.size); // Smallest first
-      const erc20IntersectionAddrs = sortedERC20Sets.reduce((acc, set) => 
-        new Set([...acc].filter(x => set.has(x)))
-      );
-      console.log('🔗 ERC-20 Intersection:', {
-        commonAddresses: Array.from(erc20IntersectionAddrs),
-        count: erc20IntersectionAddrs.size
+      console.log('✅ Common Assets Found:', {
+        nfts: common.nfts.length,
+        poaps: common.poaps.length,
+        erc20s: common.erc20s.length
       });
-      
-      // Get full objects from the wallet with smallest ERC-20 count
-      const smallestERC20Wallet = walletsAssets.reduce((min, w) => 
-        w.erc20s.length < min.erc20s.length ? w : min
-      );
-      const commonERC20s = smallestERC20Wallet.erc20s.filter(token => 
-        erc20IntersectionAddrs.has(token.address.toLowerCase())
-      );
-      console.log('✅ Common ERC-20s:', commonERC20s.map(t => `${t.symbol} (${t.address})`));
 
-      const totalCommon = commonNFTs.length + commonPOAPs.length + commonERC20s.length;
-
-      // Fetch owner/holder counts for common assets (in background, don't block results)
-      setTimeout(async () => {
-        try {
-          // Fetch NFT owner counts
-          if (commonNFTs.length > 0) {
-            for (const nft of commonNFTs) {
-              try {
-                const ownerCount = await alchemy.getOwnersCountForContract(nft.network, nft.address);
-                nft.ownerCount = ownerCount;
-              } catch (err) {
-                // Silently fail for individual NFTs
-              }
-            }
-          }
-
-          // Fetch POAP supply counts
-          if (commonPOAPs.length > 0) {
-            for (const poap of commonPOAPs) {
-              try {
-                const details = await poapClient.getEventDetails(poap.eventId);
-                poap.supply = details.supply;
-              } catch (err) {
-                // Silently fail for individual POAPs
-              }
-            }
-          }
-
-          // Update state with all counts
-          setCommonAssets(prev => ({
-            ...prev,
-            nfts: [...commonNFTs],
-            poaps: [...commonPOAPs]
-          }));
-        } catch (err) {
-          console.warn('Failed to fetch owner/holder counts:', err.message);
-        }
-      }, 100);
-
-      // Calculate total assets across all wallets (before intersection)
-      const totalNFTsAnalyzed = walletsAssets.reduce((sum, w) => sum + w.nfts.length, 0);
-      const totalPOAPsAnalyzed = walletsAssets.reduce((sum, w) => sum + w.poaps.length, 0);
-      const totalERC20sAnalyzed = walletsAssets.reduce((sum, w) => sum + w.erc20s.length, 0);
-      const totalAssetsAnalyzed = totalNFTsAnalyzed + totalPOAPsAnalyzed + totalERC20sAnalyzed;
-
-      console.log('📊 Common Assets Summary:', {
-        totalWallets: selectedAddresses.length,
-        totalAssetsAnalyzed,
-        totalNFTsAnalyzed,
-        totalPOAPsAnalyzed,
-        totalERC20sAnalyzed,
-        commonNFTs: commonNFTs.length,
-        commonPOAPs: commonPOAPs.length,
-        commonERC20s: commonERC20s.length,
-        totalCommon
-      });
+      // Calculate totals for display
+      const totalNFTsAnalyzed = allWallets.reduce((sum, w) => sum + w.nfts.length, 0);
+      const totalPOAPsAnalyzed = allWallets.reduce((sum, w) => sum + w.poaps.length, 0);
+      const totalERC20sAnalyzed = allWallets.reduce((sum, w) => sum + w.erc20s.length, 0);
 
       setCommonAssets({
-        walletCount: selectedAddresses.length,
-        wallets: selectedAddresses,
-        totalAssets: totalCommon,
-        totalAssetsAnalyzed,
+        walletCount: allWallets.length,
+        wallets: allWallets.map(w => w.address),
+        totalAssets: common.nfts.length + common.poaps.length + common.erc20s.length,
+        totalAssetsAnalyzed: totalNFTsAnalyzed + totalPOAPsAnalyzed + totalERC20sAnalyzed,
         totalNFTsAnalyzed,
         totalPOAPsAnalyzed,
         totalERC20sAnalyzed,
-        nfts: commonNFTs,
-        poaps: commonPOAPs,
-        erc20s: commonERC20s
+        nfts: common.nfts,
+        poaps: common.poaps,
+        erc20s: common.erc20s
       });
 
       setStep(4);
     } catch (err) {
+      console.error('Error in findCommonAssets:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -1076,9 +1165,19 @@ export default function TestCommonAssetsPage() {
               {erc20Tokens.length > 0 && (
                 <div className="mb-6">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-semibold">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
                       🪙 ERC-20 Tokens ({erc20Tokens.length})
                       <span className="text-sm text-gray-400">• {selectedERC20s.size} selected</span>
+                      {!erc20Tokens.some(t => t.holderCount) && (
+                        <button
+                          onClick={fetchERC20HolderCounts}
+                          disabled={loading}
+                          className="px-2 py-1 bg-green-700 hover:bg-green-600 disabled:bg-gray-600 rounded text-xs"
+                          title="Load holder counts and filter tokens with 2+ holders"
+                        >
+                          📊 Load Holder Counts
+                        </button>
+                      )}
                     </h3>
                     <div className="flex gap-2">
                       <button

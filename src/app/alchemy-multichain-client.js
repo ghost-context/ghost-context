@@ -26,26 +26,24 @@ export class AlchemyMultichainClient {
     networkMapping = {}
 
     /**
-     * @param settings The settings to use for all networks.
+     * @param settings The settings to use for all networks. REQUIRED - must include apiKey and network.
      * @param overrides Optional settings to use for specific networks.
+     * @throws Error if settings or settings.apiKey is not provided.
      */
     constructor(
         settings,
         overrides
     ) {
-        if (!settings) {
-            settings = {
-                apiKey:  process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY,
-                network: Network.ETH_MAINNET,
-            };
+        // Require explicit settings - do NOT default to NEXT_PUBLIC keys
+        // This ensures the class is only used server-side with explicit configuration
+        if (!settings || !settings.apiKey) {
+            throw new Error(
+                'AlchemyMultichainClient requires explicit settings with apiKey. ' +
+                'Use the API wrapper (src/app/lib/alchemy-api.js) for client-side code.'
+            );
         }
         if (!overrides) {
-            overrides = {
-                [Network.MATIC_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
-                [Network.ARB_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
-                [Network.OPT_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
-                [Network.BASE_MAINNET]: { apiKey: process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY }
-            };
+            overrides = {};
         }
         this.settings = settings;
         this.overrides = overrides;
@@ -57,7 +55,6 @@ export class AlchemyMultichainClient {
         // Add Zora only if supported by the installed alchemy-sdk version
         if (typeof Network.ZORA_MAINNET !== 'undefined') {
             this.networkMapping[Network.ZORA_MAINNET] = "Zora";
-            this.overrides[Network.ZORA_MAINNET] = { apiKey: process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY };
         }
         // Add POAP as a pseudo-network for event collections
         this.networkMapping["POAP"] = "POAP";
@@ -137,8 +134,9 @@ export class AlchemyMultichainClient {
 /**
  * Extend the prototype with helper methods to replace SimpleHash capabilities
  */
-AlchemyMultichainClient.prototype.getCollectionsForOwner = async function getCollectionsForOwner(walletAddress, filter = 'relevant', progressCallback = () => {}) {
-    const allNetworks = this.getAllNetworks();
+AlchemyMultichainClient.prototype.getCollectionsForOwner = async function getCollectionsForOwner(walletAddress, filter = 'relevant', progressCallback = () => {}, networksToQuery = null) {
+    // If specific networks provided, only query those (for performance)
+    const allNetworks = networksToQuery || this.getAllNetworks();
     const results = [];
     let debugCount = 0;
 

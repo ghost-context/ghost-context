@@ -3,14 +3,28 @@
 import { MoralisConfig } from '../../moralis-config.js';
 import { processWithConcurrency } from '../../lib/concurrency.js';
 import { validateAddressParam } from '../../lib/validation.js';
+import { TopK } from '../../lib/top-k.js';
+import { fetchWithRetry } from '../../lib/fetch-with-retry.js';
+import { validateOrigin } from '../../lib/csrf.js';
 
 export async function POST(request) {
+  // CSRF protection
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const body = await request.json();
     const address = (body.address || '').trim().toLowerCase();
     const selectedNFTs = body.nfts || [];
     const selectedPOAPs = body.poaps || [];
     const selectedERC20s = body.erc20s || [];
+
+    console.log(`\n[analyze-combined-overlap] Request received:`);
+    console.log(`  Source wallet: ${address}`);
+    console.log(`  NFTs: ${selectedNFTs.length}, POAPs: ${selectedPOAPs.length}, ERC-20s: ${selectedERC20s.length}`);
+    if (selectedERC20s.length > 0) {
+      console.log(`  ERC-20 tokens:`, selectedERC20s.map(t => `${t.symbol} (${t.address})`));
+    }
 
     // Validate address format
     const validationError = validateAddressParam(address);
@@ -65,7 +79,18 @@ export async function POST(request) {
     const fetchNFTOwners = async (nft) => {
       try {
         const { AlchemyMultichainClient } = await import('../../alchemy-multichain-client.js');
-        const alchemy = new AlchemyMultichainClient();
+        const { Network } = await import('alchemy-sdk');
+        // Use server-side API keys explicitly
+        const alchemy = new AlchemyMultichainClient(
+          { apiKey: process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY, network: Network.ETH_MAINNET },
+          {
+            [Network.MATIC_MAINNET]: { apiKey: process.env.ALCHEMY_POLYGON_API_KEY || process.env.NEXT_PUBLIC_MATIC_MAIN_API_KEY },
+            [Network.ARB_MAINNET]: { apiKey: process.env.ALCHEMY_ARB_API_KEY || process.env.NEXT_PUBLIC_ARB_MAIN_API_KEY },
+            [Network.OPT_MAINNET]: { apiKey: process.env.ALCHEMY_OPT_API_KEY || process.env.NEXT_PUBLIC_OPT_MAIN_API_KEY },
+            [Network.BASE_MAINNET]: { apiKey: process.env.ALCHEMY_BASE_API_KEY || process.env.NEXT_PUBLIC_BASE_MAIN_API_KEY },
+            ...(typeof Network.ZORA_MAINNET !== 'undefined' ? { [Network.ZORA_MAINNET]: { apiKey: process.env.ALCHEMY_ZORA_API_KEY || process.env.NEXT_PUBLIC_ZORA_MAIN_API_KEY } } : {}),
+          }
+        );
 
         let owners = [];
         let pageKey = undefined;
@@ -96,7 +121,10 @@ export async function POST(request) {
         let allHolders = [];
 
         do {
-          const urlBase = 'http://localhost:3000';
+          // Use VERCEL_URL in production, localhost in dev
+          const urlBase = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000';
           const url = new URL('/api/poap/event', urlBase);
           url.searchParams.set('id', poap.eventId);
           url.searchParams.set('page', String(page));
@@ -123,9 +151,15 @@ export async function POST(request) {
     // ========================================
     // 3. ANALYZE ERC-20 TOKENS (Moralis) - PARALLEL
     // ========================================
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const apiKey = process.env.MORALIS_API_KEY;
+    if (selectedERC20s.length > 0 && !apiKey) {
+      console.error('[analyze-combined-overlap] MORALIS_API_KEY not configured - ERC-20 analysis will fail');
+    }
     const fetchERC20Owners = async (token) => {
-      if (!apiKey) return { token, owners: [] };
+      if (!apiKey) {
+        console.error(`[ERC-20] No API key - skipping ${token.symbol}`);
+        return { token, owners: [] };
+      }
 
       const baseUrl = 'https://deep-index.moralis.io/api/v2.2';
       const chain = '0x2105'; // Base network
@@ -141,14 +175,15 @@ export async function POST(request) {
           });
           if (cursor) params.set('cursor', cursor);
 
-          const response = await fetch(
+          const response = await fetchWithRetry(
             `${baseUrl}/erc20/${token.address}/owners?${params}`,
             {
               headers: {
                 'accept': 'application/json',
                 'X-API-Key': apiKey
               }
-            }
+            },
+            { maxRetries: 2, baseDelayMs: 500 }
           );
 
           if (!response.ok) break;
@@ -161,8 +196,10 @@ export async function POST(request) {
           if (allOwners.length > 150000) break;
         } while (cursor);
 
+        console.log(`[ERC-20] ${token.symbol}: fetched ${allOwners.length} owners`);
         return { token, owners: allOwners };
       } catch (err) {
+        console.error(`[ERC-20] ${token.symbol}: fetch failed -`, err.message);
         return { token, owners: [] };
       }
     };
@@ -211,6 +248,9 @@ export async function POST(request) {
     }
 
     // Aggregate ERC-20 results
+    const totalERC20Owners = erc20Results.reduce((sum, r) => sum + r.owners.length, 0);
+    console.log(`[ERC-20] Total owners across ${erc20Results.length} tokens: ${totalERC20Owners}`);
+
     for (const { token, owners } of erc20Results) {
       for (const owner of owners) {
         addOverlap(owner.owner_address.toLowerCase(), {
@@ -224,35 +264,43 @@ export async function POST(request) {
     }
 
     // ========================================
-    // 4. COMPILE RESULTS
+    // 4. COMPILE RESULTS USING TOP-K
     // ========================================
-    
+
     console.log(`\n📊 Analysis Complete:`);
     console.log(`   Total wallets with ANY overlap: ${overlapMap.size}`);
     console.log(`   Source wallet: ${address}`);
-    
+
     // Determine minimum overlap threshold
     const minOverlap = totalAssets >= 2 ? 2 : 1;
     console.log(`   Minimum overlap threshold: ${minOverlap} assets`);
 
-    const kindredSpirits = Array.from(overlapMap.entries())
-      .filter(([wallet, data]) => data.count >= minOverlap) // Must have at least minOverlap shared assets
-      .map(([wallet, data]) => ({
-        address: wallet,
-        overlapCount: data.count,
-        overlapPercentage: ((data.count / totalAssets) * 100).toFixed(1),
-        sharedAssets: {
-          nfts: data.assets.nfts,
-          poaps: data.assets.poaps,
-          erc20s: data.assets.erc20s
-        },
-        totalShared: data.count
-      }))
-      .sort((a, b) => b.overlapCount - a.overlapCount)
-      .slice(0, 100); // Top 100 after filtering
+    // Use TopK to efficiently find top 100 results (O(k) memory vs O(n))
+    const topK = new TopK(100, (a, b) => a.overlapCount - b.overlapCount);
+    let filteredCount = 0;
+
+    for (const [wallet, data] of overlapMap.entries()) {
+      if (data.count >= minOverlap) {
+        topK.push({
+          address: wallet,
+          overlapCount: data.count,
+          overlapPercentage: ((data.count / totalAssets) * 100).toFixed(1),
+          sharedAssets: {
+            nfts: data.assets.nfts,
+            poaps: data.assets.poaps,
+            erc20s: data.assets.erc20s
+          },
+          totalShared: data.count
+        });
+      } else {
+        filteredCount++;
+      }
+    }
+
+    const kindredSpirits = topK.getResults();
 
     console.log(`   Kindred spirits found (>= ${minOverlap} overlaps): ${kindredSpirits.length}`);
-    console.log(`   Filtered out (< ${minOverlap} overlaps): ${overlapMap.size - kindredSpirits.length}\n`);
+    console.log(`   Filtered out (< ${minOverlap} overlaps): ${filteredCount}\n`);
 
     return new Response(
       JSON.stringify({
@@ -274,8 +322,9 @@ export async function POST(request) {
     );
 
   } catch (error) {
+    console.error('[analyze-combined-overlap] error', { message: error.message, stack: error.stack?.slice(0, 500) });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
