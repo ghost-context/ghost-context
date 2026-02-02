@@ -1,5 +1,6 @@
 // Server-side Alchemy network mapping endpoint
 import { Network } from 'alchemy-sdk';
+import { validateOrigin } from '../../../lib/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,9 @@ if (typeof Network.ZORA_MAINNET !== 'undefined') {
   NETWORK_MAPPING['ZORA_MAINNET'] = 'Zora';
 }
 
-export async function GET() {
+export async function GET(request) {
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   return Response.json({ networks: NETWORK_MAPPING });
 }

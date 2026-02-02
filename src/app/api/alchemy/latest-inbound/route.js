@@ -1,5 +1,6 @@
 // Server-side Alchemy latest inbound transfer timestamp endpoint
 import { Alchemy, Network } from 'alchemy-sdk';
+import { validateOrigin } from '../../../lib/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,9 @@ const API_KEY_MAP = {
 };
 
 export async function GET(request) {
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const { searchParams } = new URL(request.url);
     const network = searchParams.get('network');

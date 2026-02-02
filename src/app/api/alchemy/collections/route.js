@@ -3,6 +3,7 @@
 import { Network } from 'alchemy-sdk';
 import { AlchemyMultichainClient } from '../../../alchemy-multichain-client.js';
 import { validateAddressParam } from '../../../lib/validation.js';
+import { validateOrigin } from '../../../lib/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,9 @@ function getServerAlchemyClient() {
 }
 
 export async function GET(request) {
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const { searchParams } = new URL(request.url);
     const address = (searchParams.get('address') || '').trim().toLowerCase();

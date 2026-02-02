@@ -2,10 +2,14 @@
 import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
 import { normalize } from 'viem/ens';
+import { validateOrigin } from '../../../lib/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
+  const originError = validateOrigin(request);
+  if (originError) return originError;
+
   try {
     const { searchParams } = new URL(request.url);
     const name = searchParams.get('name');
