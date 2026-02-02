@@ -135,7 +135,7 @@ export async function POST(request) {
     // ========================================
     // 3. ANALYZE ERC-20 TOKENS (Moralis) - PARALLEL
     // ========================================
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const apiKey = process.env.MORALIS_API_KEY;
     if (selectedERC20s.length > 0 && !apiKey) {
       console.error('[analyze-combined-overlap] MORALIS_API_KEY not configured - ERC-20 analysis will fail');
     }

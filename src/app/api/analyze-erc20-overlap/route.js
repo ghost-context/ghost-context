@@ -21,7 +21,7 @@ export async function POST(request) {
       );
     }
 
-    const apiKey = process.env.MORALIS_API_KEY || process.env.NEXT_PUBLIC_MORALIS_API_KEY;
+    const apiKey = process.env.MORALIS_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Moralis API key not configured' }),
