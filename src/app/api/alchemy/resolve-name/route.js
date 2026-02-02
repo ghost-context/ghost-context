@@ -1,5 +1,7 @@
-// Server-side Alchemy ENS resolution endpoint
-import { Alchemy, Network } from 'alchemy-sdk';
+// Server-side ENS resolution endpoint using viem
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
+import { normalize } from 'viem/ens';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,9 +17,12 @@ export async function GET(request) {
       );
     }
 
-    const apiKey = process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY;
-    console.log('[alchemy/resolve-name] API key present:', !!apiKey, 'prefix:', apiKey?.slice(0, 8));
+    // Validate ENS name format
+    if (!name.endsWith('.eth') || name.length <= 4) {
+      return Response.json({ address: null });
+    }
 
+    const apiKey = process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'API key not configured' }),
@@ -25,14 +30,15 @@ export async function GET(request) {
       );
     }
 
-    const alchemy = new Alchemy({
-      apiKey,
-      network: Network.ETH_MAINNET,
+    // Create viem public client with Alchemy RPC
+    const client = createPublicClient({
+      chain: mainnet,
+      transport: http(`https://eth-mainnet.g.alchemy.com/v2/${apiKey}`),
     });
 
-    console.log('[alchemy/resolve-name] Resolving name:', name);
-    const address = await alchemy.core.resolveName(name);
-    console.log('[alchemy/resolve-name] Result:', address);
+    // Normalize and resolve ENS name
+    const normalizedName = normalize(name);
+    const address = await client.getEnsAddress({ name: normalizedName });
 
     return Response.json({ address: address || null });
 
