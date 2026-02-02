@@ -16,6 +16,8 @@ export async function GET(request) {
     }
 
     const apiKey = process.env.ALCHEMY_ETH_API_KEY || process.env.NEXT_PUBLIC_ETH_MAIN_API_KEY;
+    console.log('[alchemy/resolve-name] API key present:', !!apiKey, 'prefix:', apiKey?.slice(0, 8));
+
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'API key not configured' }),
@@ -28,7 +30,9 @@ export async function GET(request) {
       network: Network.ETH_MAINNET,
     });
 
+    console.log('[alchemy/resolve-name] Resolving name:', name);
     const address = await alchemy.core.resolveName(name);
+    console.log('[alchemy/resolve-name] Result:', address);
 
     return Response.json({ address: address || null });
 
