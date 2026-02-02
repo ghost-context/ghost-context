@@ -2,6 +2,8 @@
 // Only allows requests from trusted origins
 
 const ALLOWED_ORIGINS = [
+  'https://www.ghostcontext.xyz',
+  'https://ghostcontext.xyz',
   'https://ghost-context.vercel.app',
   'https://ghost-context-git-sloan-updates-2-ghost-context.vercel.app',
   'http://localhost:3000',
