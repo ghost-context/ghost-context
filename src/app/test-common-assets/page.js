@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { NeynarClient } from '../neynar';
-import { AlchemyMultichainClient } from '../alchemy-multichain-client';
+import * as AlchemyAPI from '../lib/alchemy-api.js';
 import { PoapClient } from '../poap-client';
 
 const neynar = new NeynarClient();
@@ -95,8 +95,7 @@ async function fetchWalletAssets(address, { networks = null } = {}) {
     // NFTs (if networks provided, only query those - much faster)
     (async () => {
       try {
-        const alchemy = new AlchemyMultichainClient();
-        const collections = await alchemy.getCollectionsForOwner(address, 'relevant', () => {}, networks);
+        const collections = await AlchemyAPI.getCollectionsForOwner(address, 'relevant', networks);
         return collections
           .filter(nft => nft.network !== 'POAP' && !nft.network?.toLowerCase().includes('poap'))
           .map(nft => ({
@@ -418,8 +417,7 @@ export default function TestCommonAssetsPage() {
       // 2. Fetch NFT Collections
       setProgress(prev => ({ ...prev, current: 2, message: 'Fetching NFT collections...' }));
       try {
-        const alchemy = new AlchemyMultichainClient();
-        const collections = await alchemy.getCollectionsForOwner(targetAddress, 'relevant');
+        const collections = await AlchemyAPI.getCollectionsForOwner(targetAddress, 'relevant');
         
         // Extract POAPs
         const alchemyPOAPs = collections.filter(nft => 
@@ -537,16 +535,15 @@ export default function TestCommonAssetsPage() {
       elapsedSeconds: 0
     });
 
-    const alchemy = new AlchemyMultichainClient();
     const BATCH_SIZE = 10;
     const updatedNFTs = [...nftCollections];
 
     for (let i = 0; i < updatedNFTs.length; i += BATCH_SIZE) {
       const batch = updatedNFTs.slice(i, i + BATCH_SIZE);
-      
+
       await Promise.all(batch.map(async (nft, idx) => {
         try {
-          const ownerCount = await alchemy.getOwnersCountForContract(nft.network, nft.address);
+          const ownerCount = await AlchemyAPI.getOwnersCountForContract(nft.network, nft.address);
           updatedNFTs[i + idx].ownerCount = ownerCount;
         } catch (err) {
           // Silently skip errors
